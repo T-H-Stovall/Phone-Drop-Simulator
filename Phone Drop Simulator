@@ -1,0 +1,1408 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif;background:#f7f7f5}img{max-width:100%}[hidden]{display:none!important}</style></head><body><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:wght@600;700;800&family=DM+Mono:wght@400;500&display=swap">
+<title>Phone Drop Lab</title>
+<style>
+/* Layout concept: a lab workbench. The drop stage (a falling phone beside a zoomed cross-section of the landing) sits on the left with the energy meters under it and the verdict below that. The setup controls sit on the right. Missions, data, graphs and the model notes live in tabs underneath. One column on phones, with the Drop button pinned to the bottom edge. */
+:root{
+  /* color: teal-biased neutrals, the class-handout teal as the one accent, and four energy colors that never change meaning */
+  --bg:#edf3f4; --panel:#ffffff; --panel-2:#f3f8f9; --ink:#10242b; --ink-2:#4b6169; --line:#cddadf;
+  --accent:#156082; --accent-ink:#ffffff; --accent-soft:#dcedf4; --focus:#0a4fb3;
+  --stage:#f7fbfc;
+  --pe:#d98d00; --ke:#2a6fdb; --sq:#7c52d6; --ht:#e0602a;
+  --ok:#1b7f4b; --ok-soft:#e0f3e8; --bad:#c62f3b; --bad-soft:#fbe4e5; --warn:#a86400; --warn-soft:#fff1d6;
+  /* type: a very legible body face, a characterful display face for headings and verdicts, a mono face for instrument readouts */
+  --font-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-display:"Bricolage Grotesque","Atkinson Hyperlegible",system-ui,sans-serif;
+  --font-data:"DM Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d181c; --panel:#15252b; --panel-2:#1a2e35; --ink:#e6f0f3; --ink-2:#9db4bb; --line:#2c454e;
+    --accent:#59b3d8; --accent-ink:#06222e; --accent-soft:#173a49; --focus:#8bb6ff; --stage:#0f1e23;
+    --pe:#f2b632; --ke:#6ea6ff; --sq:#b096f5; --ht:#ff8a55;
+    --ok:#5bcc90; --ok-soft:#153b2a; --bad:#ff6f79; --bad-soft:#40191d; --warn:#f0b04a; --warn-soft:#3a2b10;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d181c; --panel:#15252b; --panel-2:#1a2e35; --ink:#e6f0f3; --ink-2:#9db4bb; --line:#2c454e;
+  --accent:#59b3d8; --accent-ink:#06222e; --accent-soft:#173a49; --focus:#8bb6ff; --stage:#0f1e23;
+  --pe:#f2b632; --ke:#6ea6ff; --sq:#b096f5; --ht:#ff8a55;
+  --ok:#5bcc90; --ok-soft:#153b2a; --bad:#ff6f79; --bad-soft:#40191d; --warn:#f0b04a; --warn-soft:#3a2b10;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5;padding-inline:16px;padding-block:16px 40px}
+.wrap{max-width:1200px;margin:0 auto}
+h1,h2,h3,h4,p,figure{margin:0}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.muted{color:var(--ink-2);font-size:14px}
+
+/* header */
+.top{display:flex;gap:12px 24px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px}
+.title{min-width:0;max-width:760px}
+h1{font:800 clamp(28px,4.4vw,38px)/1.02 var(--font-display);letter-spacing:-.015em;text-wrap:balance}
+.sub{color:var(--ink-2);margin-top:6px;max-width:64ch}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{display:inline-flex;gap:7px;align-items:center;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);font-size:14px;cursor:pointer;min-height:36px}
+.chip input{accent-color:var(--accent);width:16px;height:16px;margin:0}
+
+/* layout */
+.workbench{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);margin-bottom:14px}
+.side{display:contents}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.h2{font:700 19px/1.2 var(--font-display);margin-bottom:12px}
+.h3{font:700 16px/1.2 var(--font-display);margin:16px 0 6px}
+@media (min-width:980px){
+  .workbench{grid-template-columns:minmax(0,1fr) 380px;grid-template-areas:"stage side" "result side";align-items:start}
+  .stage{grid-area:stage}
+  .result{grid-area:result}
+  .side{display:flex;flex-direction:column;gap:12px;grid-area:side;min-width:0}
+}
+
+/* stage */
+.views{display:grid;gap:12px;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}
+.pane{min-width:0}
+.pane-title{font:700 14px/28px var(--font-body);height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane-title span{font-weight:400;color:var(--ink-2);margin-left:6px;font-size:13px}
+.cv{display:block;width:100%;border:1px solid var(--line);border-radius:8px;background:var(--stage)}
+.cv-stage{height:380px}
+.cv-zoom{height:352px}
+.live{display:flex;gap:6px 22px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--ink-2)}
+.live b{font:500 15px var(--font-data);color:var(--ink);margin-left:4px;font-variant-numeric:tabular-nums}
+.bars{display:grid;gap:2px}
+.ebar{display:grid;grid-template-columns:minmax(118px,150px) minmax(0,1fr) 64px;gap:10px;align-items:center;min-height:28px}
+.nm{font-size:14px;white-space:nowrap}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px}
+.dot.pe,.fill.pe{background:var(--pe)} .dot.ke,.fill.ke{background:var(--ke)} .dot.sq,.fill.sq{background:var(--sq)} .dot.ht,.fill.ht{background:var(--ht)}
+.track{position:relative;height:16px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.fill{position:absolute;inset:0;transform-origin:left center;transform:scaleX(0)}
+.num{font:500 13px var(--font-data);text-align:right;font-variant-numeric:tabular-nums}
+.bar-note{margin-top:8px;color:var(--ink-2);font-size:14px}
+.bar-note b{font-family:var(--font-data);font-weight:500;color:var(--ink)}
+
+/* controls */
+.field{border:0;padding:0;margin:0 0 16px;min-width:0}
+.lab{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:0;margin-bottom:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2)}
+legend.lab{display:block}
+.val{font:500 16px var(--font-data);color:var(--ink);letter-spacing:0;text-transform:none;font-variant-numeric:tabular-nums}
+.step-row{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:8px;align-items:center}
+input[type=range]{width:100%;height:36px;margin:0;accent-color:var(--accent)}
+.sbtn{width:40px;height:40px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);font-size:22px;line-height:1;cursor:pointer}
+.sbtn:hover{border-color:var(--accent)}
+.opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.opts.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.opt{position:relative;display:flex;align-items:center;gap:10px;padding:8px 10px;min-height:50px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel-2);cursor:pointer;min-width:0}
+.opt input{position:absolute;opacity:0;width:1px;height:1px}
+.opt.on{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.opt:focus-within{outline:3px solid var(--focus);outline-offset:2px}
+.opt b{display:block;font-size:14px;line-height:1.2}
+.opt small{display:block;font-size:12px;color:var(--ink-2);line-height:1.2;margin-top:2px}
+.opts.three .opt{flex-direction:column;align-items:flex-start;gap:0}
+.sw{width:30px;height:30px;border-radius:6px;flex:none;border:1px solid rgba(0,0,0,.28)}
+.sw-concrete{background:radial-gradient(circle at 25% 30%,rgba(255,255,255,.4) 1px,transparent 2px) 0 0/9px 9px,radial-gradient(circle at 70% 70%,rgba(0,0,0,.3) 1px,transparent 2px) 0 0/7px 7px,#8b9298}
+.sw-tile{background:linear-gradient(90deg,rgba(0,0,0,.3) 1.5px,transparent 1.5px) 0 0/15px 15px,linear-gradient(rgba(0,0,0,.3) 1.5px,transparent 1.5px) 0 0/15px 15px,#d5dee2}
+.sw-wood{background:repeating-linear-gradient(0deg,#b98450 0 6px,#8f6236 6px 7px)}
+.sw-carpet{background:radial-gradient(circle,rgba(255,255,255,.4) 1px,transparent 1.5px) 0 0/5px 5px,#5f82ab}
+.sw-grass{background:repeating-linear-gradient(90deg,#4b8f3d 0 2px,#63ab4f 2px 5px)}
+.sw-foam{background:radial-gradient(circle,rgba(255,255,255,.6) 2px,transparent 2.5px) 0 0/8px 8px,#88bccb}
+.glass-info{font-size:14px;color:var(--ink-2);margin-top:8px}
+.glass-info b{font-family:var(--font-data);font-weight:500;color:var(--ink)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.row.between{justify-content:space-between}
+.wrap-row{align-items:flex-start}
+
+/* buttons */
+.btn{font-weight:700;font-size:14px;padding:8px 14px;min-height:40px;border-radius:8px;border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);cursor:pointer}
+.btn:hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.small{padding:5px 11px;min-height:34px;font-size:13px}
+.btn:disabled,.drop:disabled{opacity:.55;cursor:not-allowed}
+.dropbar{position:sticky;bottom:0;z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px calc(12px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 20px rgba(8,30,40,.10)}
+.drop{display:block;width:100%;padding:14px 16px;min-height:54px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:800 20px var(--font-display);letter-spacing:.005em;cursor:pointer}
+.drop:hover:not(:disabled){filter:brightness(1.08)}
+.dropbar .row{margin-top:10px}
+.tally{font:500 13px var(--font-data);color:var(--ink-2)}
+.predict{position:absolute;left:0;right:0;bottom:calc(100% + 8px);z-index:7;padding:10px 12px;border-radius:10px;background:var(--warn-soft);border:1px solid var(--warn);box-shadow:0 10px 26px rgba(8,30,40,.24)}
+.predict p{color:var(--ink)}
+.predict .row{margin-top:8px}
+
+/* result */
+.tag{display:inline-block;margin-bottom:12px;padding:4px 10px;border-radius:6px;background:var(--warn-soft);border:1px solid var(--warn);font-size:13px}
+.verdict{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;padding:16px;border-radius:10px;background:var(--ok-soft);align-items:center}
+.verdict.bad{background:var(--bad-soft)}
+.vphone svg{display:block;width:84px;height:auto}
+.vtitle{font:800 26px/1.05 var(--font-display);letter-spacing:-.01em;margin-bottom:6px}
+.verdict.bad .vtitle{color:var(--bad)}
+.verdict:not(.bad) .vtitle{color:var(--ok)}
+.why{margin-top:6px;color:var(--ink-2);font-size:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px;margin-top:12px}
+.stat{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.stat span{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2)}
+.stat b{display:block;font:500 20px/1.3 var(--font-data);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.meterbox{margin-top:18px}
+.meter{position:relative;height:16px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px}
+.meter .fill{position:absolute;inset:0;transform-origin:left center;background:var(--ok);border-radius:7px}
+.meter.bad .fill{background:var(--bad)}
+.meter .mark{position:absolute;top:-6px;bottom:-6px;width:3px;margin-left:-1.5px;background:var(--ink);border-radius:2px}
+.meter-lab{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;font:500 13px var(--font-data);color:var(--ink-2)}
+.fx{margin-top:16px}
+.fx svg{display:block;width:100%;height:auto;max-height:340px}
+.fx figcaption{font-size:14px;color:var(--ink-2);margin-top:6px;max-width:72ch}
+.predres{margin-top:12px;font-weight:700}
+
+/* tabs */
+.tabs-card{padding:0 16px 16px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{padding:14px 16px 12px;border:0;border-bottom:3px solid transparent;background:none;color:var(--ink-2);font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap}
+.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+.badge{display:inline-block;min-width:22px;padding:0 6px;margin-left:4px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font:500 12px/20px var(--font-data);text-align:center}
+.panel{padding-top:16px}
+.lead{font:700 16px var(--font-display);margin-bottom:12px}
+.missions{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))}
+.mission{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.mission.done{background:var(--ok-soft);border-color:var(--ok)}
+.mno{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font:800 16px var(--font-display);background:var(--accent-soft);color:var(--accent)}
+.mission.done .mno{background:var(--ok);color:var(--panel)}
+.mission h4{font:700 16px/1.25 var(--font-display);margin-bottom:4px}
+.mission p{margin-bottom:6px}
+.mission .note{font-size:14px;color:var(--ink-2)}
+.mission .note b{color:var(--ink)}
+.mission details{font-size:14px;color:var(--ink-2)}
+.mission summary{cursor:pointer;color:var(--accent);font-weight:700}
+.tablewrap{overflow-x:auto;margin-top:12px;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-align:left;color:var(--ink-2);background:var(--panel-2);border-bottom:2px solid var(--line);padding:8px 10px;white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid var(--line);font-family:var(--font-data);white-space:nowrap;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.r{text-align:right}
+.pill{display:inline-block;padding:1px 9px;border-radius:999px;font:500 12px/20px var(--font-data)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.copybox{width:100%;min-height:130px;margin-top:10px;padding:8px;font:12px/1.4 var(--font-data);background:var(--panel-2);border:1px solid var(--line);border-radius:8px}
+.graphs{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));margin-top:14px}
+.gfig figcaption{font:700 15px var(--font-display);margin-bottom:6px}
+.gfig svg{display:block;width:100%;height:auto}
+.legend{margin-top:8px;font-size:14px;color:var(--ink-2)}
+.lg{display:inline-block;width:12px;height:12px;margin:0 5px 0 14px;vertical-align:-1px}
+.lg.ok{border-radius:50%;background:var(--ok)}
+.lg.bad{background:linear-gradient(45deg,transparent 42%,var(--bad) 42% 58%,transparent 58%),linear-gradient(-45deg,transparent 42%,var(--bad) 42% 58%,transparent 58%)}
+.prose h3{font:700 17px var(--font-display);margin:18px 0 4px}
+.prose h3:first-child{margin-top:0}
+.prose p,.prose li{max-width:72ch}
+.prose ul{margin:4px 0 10px;padding-left:20px}
+.mathbox{margin-top:12px;padding:12px 14px;font:13px/1.7 var(--font-data);background:var(--panel-2);border:1px solid var(--line);border-radius:8px;overflow-x:auto;white-space:pre}
+
+.toast{position:fixed;left:50%;bottom:calc(132px + env(safe-area-inset-bottom,0px));transform:translate(-50%,10px);max-width:min(92vw,440px);padding:10px 16px;border-radius:10px;background:var(--ink);color:var(--panel);font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:20}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* svg graphs */
+.g-bg{fill:var(--panel-2)}
+.g-grid{stroke:var(--line);stroke-width:1;fill:none}
+.g-axis{stroke:var(--ink-2);stroke-width:1.5;fill:none}
+.g-tick{fill:var(--ink-2);font:11px var(--font-data)}
+.g-lab{fill:var(--ink-2);font:12px var(--font-body)}
+.g-note{fill:var(--ink);font:500 12px var(--font-data)}
+.g-line{stroke:var(--accent);stroke-width:3;fill:none;stroke-linecap:round}
+.g-area{fill:var(--accent);fill-opacity:.2}
+.g-ghost{stroke:var(--ink-2);stroke-opacity:.4;stroke-width:1.5;fill:none}
+.g-break{stroke:var(--bad);stroke-width:2;stroke-dasharray:6 4;fill:none}
+.g-breaklab{fill:var(--bad);font:700 12px var(--font-body)}
+.g-pt-ok{fill:var(--ok);stroke:var(--panel);stroke-width:1.5}
+.g-pt-bad{stroke:var(--bad);stroke-width:3;stroke-linecap:round;fill:none}
+.g-ring{fill:none;stroke:var(--ink);stroke-width:2}
+.g-conn{stroke:var(--ink-2);stroke-width:1.2;stroke-dasharray:4 3;fill:none;opacity:.7}
+.draw{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:dr .7s ease-out forwards}
+@keyframes dr{to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.draw{animation:none;stroke-dasharray:none;stroke-dashoffset:0}}
+
+@media (max-width:700px){
+  .views{grid-template-columns:minmax(0,1fr)}
+  .cv-stage{height:260px}
+  .cv-zoom{height:250px}
+  .ebar{grid-template-columns:104px minmax(0,1fr) 58px;gap:8px}
+  .nm{font-size:13px}
+  .verdict{grid-template-columns:64px minmax(0,1fr);gap:12px;align-items:start;padding:14px}
+  .vphone svg{width:64px}
+  .vtitle{font-size:22px}
+  .card{padding:14px}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+/* drop bar: compact and pinned to the bottom edge on phones; pinned above the setup controls on wide screens */
+@media (max-width:979px){
+  .dropbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;align-items:center;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px))}
+  .dropbar .row.between{display:contents}
+  .dropbar .tally{grid-column:1 / -1}
+  .tally:empty{display:none}
+  .drop{min-height:50px;padding:10px 14px;font-size:19px}
+  .toast{bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+}
+@media (min-width:980px){
+  .side{align-self:stretch}
+  .dropbar{order:-1;top:8px;bottom:auto;padding-bottom:12px;box-shadow:0 6px 18px rgba(8,30,40,.12)}
+  .predict{top:calc(100% + 8px);bottom:auto}
+  .toast{bottom:28px}
+}
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <div class="title">
+      <h1>Phone Drop Lab</h1>
+      <p class="sub">Choose a height, a landing spot, and a case. Drop the phone, then use the energy bars, the zoom view, and the force graph to explain what happened to the screen.</p>
+    </div>
+    <div class="chips" role="group" aria-label="Display options">
+      <label class="chip" for="optAnim"><input type="checkbox" id="optAnim" checked> Animate</label>
+      <label class="chip" for="optSlow"><input type="checkbox" id="optSlow" checked> Slow motion</label>
+      <label class="chip" for="optSound"><input type="checkbox" id="optSound"> Sound</label>
+    </div>
+  </header>
+
+  <div class="workbench">
+
+    <section class="card stage" id="stageCard" aria-labelledby="stageTitle">
+      <h2 class="h2" id="stageTitle">Drop stage</h2>
+      <div class="views">
+        <div class="pane">
+          <canvas id="cvStage" class="cv cv-stage" role="img" aria-label="Side view of a phone above the landing surface"></canvas>
+        </div>
+        <div class="pane">
+          <p class="pane-title">Zoom in on the landing</p>
+          <canvas id="cvZoom" class="cv cv-zoom" role="img" aria-label="Cross-section of the phone, case, and landing surface"></canvas>
+        </div>
+      </div>
+      <div class="live" aria-hidden="true">
+        <span>Height <b id="liveH">1.00 m</b></span>
+        <span>Speed <b id="liveV">0.00 m/s</b></span>
+        <span>Time <b id="liveT">0.00 s</b></span>
+      </div>
+
+      <h3 class="h3">Where is the energy?</h3>
+      <div class="bars" id="bars">
+        <div class="ebar" data-k="pe"><span class="nm"><i class="dot pe"></i>PE from height</span><span class="track"><span class="fill pe"></span></span><span class="num">0.00 J</span></div>
+        <div class="ebar" data-k="ke"><span class="nm"><i class="dot ke"></i>KE (motion)</span><span class="track"><span class="fill ke"></span></span><span class="num">0.00 J</span></div>
+        <div class="ebar" data-k="sq"><span class="nm"><i class="dot sq"></i>PE from squish</span><span class="track"><span class="fill sq"></span></span><span class="num">0.00 J</span></div>
+        <div class="ebar" data-k="ht"><span class="nm"><i class="dot ht"></i>Heat and sound</span><span class="track"><span class="fill ht"></span></span><span class="num">0.00 J</span></div>
+      </div>
+      <p class="bar-note">Total energy: <b id="barTotal">1.76 J</b>. It is never used up. It only changes form.</p>
+    </section>
+
+    <section class="card result" id="resultCard" aria-labelledby="resTitle">
+      <h2 class="h2" id="resTitle">What happened</h2>
+      <p class="tag" id="exTag">Example: 1.0 m onto tile, 180 g phone, no case, thin glass. Press Drop it! to run your own.</p>
+      <div class="verdict" id="verdict">
+        <div class="vphone" id="vPhone" aria-hidden="true"></div>
+        <div class="vtext">
+          <h3 class="vtitle" id="vTitle"></h3>
+          <p id="vText"></p>
+          <p class="why" id="vWhy"></p>
+        </div>
+      </div>
+      <div class="stats" id="stats">
+        <div class="stat"><span>Speed at impact</span><b id="stV"></b></div>
+        <div class="stat"><span>Kinetic energy</span><b id="stKE"></b></div>
+        <div class="stat"><span>Squish distance</span><b id="stX"></b></div>
+        <div class="stat"><span>Peak force</span><b id="stF"></b></div>
+        <div class="stat"><span>Glass breaking point</span><b id="stB"></b></div>
+      </div>
+      <div class="meterbox">
+        <div class="meter" id="meter"><span class="fill" id="mtFill"></span><span class="mark" id="mtMark"></span></div>
+        <div class="meter-lab"><span id="mtF"></span><span id="mtB"></span></div>
+      </div>
+      <figure class="fx">
+        <svg id="fxSvg" viewBox="0 0 440 250" role="img" aria-label="Graph of force against squish distance"></svg>
+        <figcaption id="fxCap"></figcaption>
+      </figure>
+      <p class="predres" id="predResult" hidden></p>
+    </section>
+
+    <div class="side">
+      <section class="card controls" aria-labelledby="ctlTitle">
+        <h2 class="h2" id="ctlTitle">Set up the drop</h2>
+
+        <div class="field">
+          <div class="lab"><label for="inHeight">Drop height</label><span class="val" id="outHeight">1.00 m</span></div>
+          <div class="step-row">
+            <button type="button" class="sbtn" id="hMinus" aria-label="Lower the drop height">&minus;</button>
+            <input type="range" id="inHeight" min="0.1" max="3" step="0.05" value="1">
+            <button type="button" class="sbtn" id="hPlus" aria-label="Raise the drop height">+</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="lab"><label for="inMass">Phone mass</label><span class="val" id="outMass">180 g</span></div>
+          <div class="step-row">
+            <button type="button" class="sbtn" id="mMinus" aria-label="Lighter phone">&minus;</button>
+            <input type="range" id="inMass" min="100" max="300" step="10" value="180">
+            <button type="button" class="sbtn" id="mPlus" aria-label="Heavier phone">+</button>
+          </div>
+        </div>
+
+        <fieldset class="field">
+          <legend class="lab">Lands on</legend>
+          <div class="opts" id="surfaceGroup"></div>
+        </fieldset>
+
+        <fieldset class="field">
+          <legend class="lab">Case</legend>
+          <div class="opts" id="caseGroup"></div>
+        </fieldset>
+
+        <fieldset class="field">
+          <legend class="lab">Screen glass</legend>
+          <div class="opts three" id="glassGroup"></div>
+          <p class="glass-info" id="glassInfo"></p>
+          <div class="row" id="mysteryTools" hidden>
+            <button type="button" class="btn small" id="btnReveal">Reveal breaking point</button>
+            <button type="button" class="btn small ghost" id="btnNewMystery">New mystery glass</button>
+          </div>
+        </fieldset>
+      </section>
+
+      <div class="dropbar">
+        <div class="predict" id="predictBox" hidden>
+          <p><b>Predict first.</b> Will the screen crack?</p>
+          <div class="row">
+            <button type="button" class="btn" id="predYes">It will crack</button>
+            <button type="button" class="btn" id="predNo">It will survive</button>
+            <button type="button" class="btn ghost" id="predCancel">Cancel</button>
+          </div>
+        </div>
+        <button type="button" class="drop" id="btnDrop">Drop it!</button>
+        <div class="row between">
+          <label class="chip" for="optPredict"><input type="checkbox" id="optPredict"> Predict first</label>
+          <span class="tally" id="predScore"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="card tabs-card" aria-label="Missions, data, graphs, and how it works">
+    <div class="tabs" role="tablist" aria-label="Lab tools">
+      <button type="button" class="tab" role="tab" id="tabM" aria-controls="panM" aria-selected="true">Missions</button>
+      <button type="button" class="tab" role="tab" id="tabD" aria-controls="panD" aria-selected="false" tabindex="-1">Data <span class="badge" id="nTrials">0</span></button>
+      <button type="button" class="tab" role="tab" id="tabG" aria-controls="panG" aria-selected="false" tabindex="-1">Graphs</button>
+      <button type="button" class="tab" role="tab" id="tabH" aria-controls="panH" aria-selected="false" tabindex="-1">How it works</button>
+    </div>
+
+    <div class="panel" role="tabpanel" id="panM" aria-labelledby="tabM">
+      <p class="lead" id="missionCount">0 of 6 missions complete</p>
+      <div class="missions" id="missionList"></div>
+    </div>
+
+    <div class="panel" role="tabpanel" id="panD" aria-labelledby="tabD" hidden>
+      <div class="row between wrap-row">
+        <p class="muted">Every drop is logged here. Copy the table, then paste it into OneNote or Word.</p>
+        <div class="row">
+          <button type="button" class="btn small" id="btnCopy">Copy table</button>
+          <button type="button" class="btn small ghost" id="btnClear">Start over</button>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table id="trialTable">
+          <thead><tr>
+            <th>#</th><th class="r">Height (m)</th><th class="r">Total mass (g)</th><th>Surface</th><th>Case</th><th>Glass</th>
+            <th class="r">Speed (m/s)</th><th class="r">KE (J)</th><th class="r">Squish (mm)</th><th class="r">Peak force (N)</th><th>Result</th>
+          </tr></thead>
+          <tbody id="trialBody"></tbody>
+        </table>
+      </div>
+      <p class="muted" id="emptyData">No drops yet. Each drop you run will appear here.</p>
+      <textarea class="copybox" id="copyFallback" readonly hidden aria-label="Table text to copy"></textarea>
+      <p class="muted" id="copyMsg" role="status"></p>
+    </div>
+
+    <div class="panel" role="tabpanel" id="panG" aria-labelledby="tabG" hidden>
+      <label class="chip" for="optConnect"><input type="checkbox" id="optConnect"> Connect drops with the same mass</label>
+      <div class="graphs">
+        <figure class="gfig"><figcaption>Kinetic energy vs. speed at impact</figcaption><svg id="gKE" viewBox="0 0 440 290" role="img" aria-label="Scatter plot of kinetic energy against speed"></svg></figure>
+        <figure class="gfig"><figcaption>Peak force vs. squish distance</figcaption><svg id="gPF" viewBox="0 0 440 290" role="img" aria-label="Scatter plot of peak force against squish distance"></svg></figure>
+      </div>
+      <p class="legend"><span class="lg ok"></span> Screen survived <span class="lg bad"></span> Screen cracked</p>
+    </div>
+
+    <div class="panel prose" role="tabpanel" id="panH" aria-labelledby="tabH" hidden>
+      <h3>Follow the energy</h3>
+      <p>Held up high, the phone has potential energy (PE) from its height. As it falls, that PE transfers to kinetic energy (KE). When it lands, the KE transfers into squishing the phone, the case, and the surface. That squish stores PE for a moment. Then the energy leaves as heat and sound, plus a small bounce.</p>
+      <h3>What sets the peak force</h3>
+      <p>The landing squishes a little like a spring. The force grows as the squish grows, until the phone stops. The biggest force is the peak force. A softer landing squishes farther, so the same energy is stopped over a longer distance and the peak force is smaller. In the force graph, the shaded area is the phone's energy.</p>
+      <h3>When the glass cracks</h3>
+      <p>The screen cracks when the peak force goes past the glass's breaking point. Glass is brittle. It bends and springs back until it cracks, so its elastic limit and its breaking point are almost the same. The floor pushes up on the phone with the same size force that the phone pushes down on the floor.</p>
+      <h3>What this model leaves out</h3>
+      <ul>
+        <li>Air resistance. It is very small for a phone.</li>
+        <li>Landing on a corner or at a tilt. Every drop here lands flat, screen down.</li>
+        <li>Real impacts last only a few thousandths of a second and are not perfectly smooth.</li>
+        <li>Real glass, which is never exactly the same twice.</li>
+      </ul>
+      <p>The numbers are realistic but simplified. Use them to compare drops, not to predict your own phone.</p>
+      <label class="chip" for="optMath"><input type="checkbox" id="optMath"> Show the math</label>
+      <pre class="mathbox" id="mathBox" hidden></pre>
+    </div>
+  </section>
+
+  <div class="sr-only" id="srLive" role="status" aria-live="polite"></div>
+</div>
+
+<script>
+/* ===== Physics model (no DOM in here, so it can be tested on its own) ===== */
+var LAB = (function () {
+  'use strict';
+  var G = 9.8;           // m/s^2
+  var PHONE_GIVE = 1.5;  // mm the phone body itself squishes for every 1000 N
+
+  // give = mm of squish for every 1000 N of force. ret = share of the impact energy that comes back as a bounce.
+  var SURFACES = [
+    { id: 'concrete', name: 'Concrete',   feel: 'very hard', give: 0.5, ret: 0.20 },
+    { id: 'tile',     name: 'Tile',       feel: 'hard',      give: 1.5, ret: 0.16 },
+    { id: 'wood',     name: 'Wood floor', feel: 'firm',      give: 3.5, ret: 0.09 },
+    { id: 'carpet',   name: 'Carpet',     feel: 'soft',      give: 12,  ret: 0.02 },
+    { id: 'grass',    name: 'Grass',      feel: 'softer',    give: 20,  ret: 0.01 },
+    { id: 'foam',     name: 'Foam mat',   feel: 'very soft', give: 30,  ret: 0.01 }
+  ];
+  var CASES = [
+    { id: 'none',   name: 'No case',           sub: 'bare phone', add: 0,  give: 0,  ret: 1.0 },
+    { id: 'thin',   name: 'Thin plastic',      sub: '+15 g',      add: 15, give: 2,  ret: 0.8 },
+    { id: 'rubber', name: 'Rubber case',       sub: '+50 g',      add: 50, give: 8,  ret: 0.5 },
+    { id: 'bumper', name: 'Air-pocket bumper', sub: '+70 g',      add: 70, give: 14, ret: 0.3 }
+  ];
+  var GLASSES = [
+    { id: 'thin',    name: 'Thin glass',    breakN: 1000 },
+    { id: 'thick',   name: 'Thick glass',   breakN: 1600 },
+    { id: 'mystery', name: 'Mystery glass', breakN: null }
+  ];
+
+  function pick(list, id) {
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return list[0];
+  }
+
+  // p = { h (m), phoneG (g), surface (id), caseId (id), breakN (N) }
+  function compute(p) {
+    var S = pick(SURFACES, p.surface), C = pick(CASES, p.caseId);
+    var totalG = p.phoneG + C.add, m = totalG / 1000, h = p.h;
+    var v = Math.sqrt(2 * G * h);              // speed when it lands
+    var tFall = Math.sqrt(2 * h / G);          // time to fall
+    var E0 = m * G * h;                        // PE at the top = KE at the bottom
+    var comp = PHONE_GIVE + S.give + C.give;   // phone, case and surface squish in a stack (mm per 1000 N)
+    var k = 1e6 / comp;                        // stiffness of the whole stack, N per m
+    var x = Math.sqrt(2 * E0 / k);             // biggest squish, m  (energy stored = 1/2 k x^2 = KE)
+    var F = k * x;                             // peak force, N
+    var cracked = F > p.breakN;
+    var ret = S.ret * C.ret * (cracked ? 0.5 : 1);
+    var bounces = [], hb = h;
+    for (var i = 0; i < 3; i++) { hb *= ret; if (hb < 0.01) break; bounces.push(hb); }
+    return {
+      h: h, phoneG: p.phoneG, totalG: totalG, m: m, weight: m * G,
+      v: v, tFall: tFall, E0: E0, KE: E0,
+      comp: comp, k: k, xmm: x * 1000, F: F,
+      parts: { phone: F * PHONE_GIVE / 1000, cushion: F * C.give / 1000, surface: F * S.give / 1000 },
+      brk: p.breakN, cracked: cracked, ratio: F / p.breakN,
+      ret: ret, bounces: bounces,
+      surface: S.id, surfaceName: S.name, caseId: C.id, caseName: C.name
+    };
+  }
+
+  // Animation timeline. Every segment has a duration (seconds on screen) and at(u) for u in 0..1 that returns
+  // the physical state: y (m above the surface), s (squish, 0..1 of the biggest), F (N), and the four energies (J).
+  function timeline(r, slow) {
+    var m = r.m, E0 = r.E0, T = r.tFall, segs = [], HALF = Math.PI / 2;
+    var crackU = r.cracked ? Math.asin(Math.min(1, r.brk / r.F)) / HALF : null;
+    var dc = slow < 1 ? 0.6 : 0.3;
+
+    segs.push({ kind: 'fall', dur: Math.max(0.35, T / slow), at: function (u) {
+      var t = u * T, y = Math.max(0, r.h - 0.5 * G * t * t), v = G * t;
+      return { phase: 'fall', t: t, y: y, s: 0, F: 0, pe: m * G * y, ke: 0.5 * m * v * v, sq: 0, ht: 0, crackT: 0 };
+    } });
+
+    segs.push({ kind: 'compress', dur: dc, at: function (u) {
+      var th = u * HALF, s = Math.sin(th), c = Math.cos(th);
+      var ck = (crackU !== null && u >= crackU) ? Math.min(1, (u - crackU) / 0.3) : 0;
+      return { phase: 'compress', t: T, y: 0, s: s, F: r.F * s, pe: 0, ke: E0 * c * c, sq: E0 * s * s, ht: 0, crackT: ck };
+    } });
+
+    segs.push({ kind: 'release', dur: dc, at: function (u) {
+      var w = Math.sin(u * HALF); w = w * w;                 // share of the stored energy that has been let go
+      return { phase: 'release', t: T, y: 0, s: Math.cos(u * HALF), F: r.F * Math.cos(u * HALF),
+               pe: 0, ke: r.ret * E0 * w, sq: E0 * (1 - w), ht: (1 - r.ret) * E0 * w, crackT: r.cracked ? 1 : 0 };
+    } });
+
+    var lastMech = r.ret * E0;
+    r.bounces.forEach(function (hb) {
+      var mech = m * G * hb, Tb = 2 * Math.sqrt(2 * hb / G);
+      lastMech = mech;
+      segs.push({ kind: 'bounce', dur: Math.max(0.25, Tb / slow), at: function (u) {
+        var y = 4 * hb * u * (1 - u), pe = m * G * y;
+        return { phase: 'bounce', t: T, y: y, s: 0, F: 0, pe: pe, ke: Math.max(0, mech - pe), sq: 0, ht: E0 - mech, crackT: r.cracked ? 1 : 0 };
+      } });
+    });
+
+    var lm = lastMech;
+    segs.push({ kind: 'settle', dur: 0.5, at: function (u) {
+      var ke = lm * (1 - u);
+      return { phase: 'settle', t: T, y: 0, s: 0, F: 0, pe: 0, ke: ke, sq: 0, ht: E0 - ke, crackT: r.cracked ? 1 : 0 };
+    } });
+    return segs;
+  }
+
+  function restState(r) {
+    return { phase: 'rest', t: r.tFall, y: 0, s: 0, F: 0, pe: 0, ke: 0, sq: 0, ht: r.E0, crackT: r.cracked ? 1 : 0 };
+  }
+  function readyState(p) {
+    var S = pick(CASES, p.caseId), m = (p.phoneG + S.add) / 1000, E0 = m * G * p.h;
+    return { phase: 'ready', t: 0, y: p.h, s: 0, F: 0, pe: E0, ke: 0, sq: 0, ht: 0, crackT: 0, E0: E0 };
+  }
+
+  function newMystery() { return 700 + 10 * Math.floor(Math.random() * 121); }   // 700..1900 N
+
+  /* ---- Missions. Each check() looks at the list of logged trials. ---- */
+  function anyPair(t, fn) {
+    for (var i = 0; i < t.length; i++) for (var j = 0; j < t.length; j++) if (i !== j && fn(t[i], t[j])) return true;
+    return false;
+  }
+  var MISSIONS = [
+    { id: 'double', title: 'Double the speed',
+      task: 'Make the phone hit the ground about twice as fast as it did in another drop. Keep the mass and case the same. Then compare the kinetic energy of the two drops.',
+      hint: 'Doubling the height does not double the speed. Try a few heights and watch the speed column.',
+      note: 'How high did you have to drop it to double the speed? What happened to the kinetic energy?',
+      check: function (t) { return anyPair(t, function (a, b) { var q = b.v / a.v; return a.totalG === b.totalG && q >= 1.9 && q <= 2.1; }); } },
+    { id: 'mass', title: 'Heavy vs. light',
+      task: 'Drop a light phone and a heavy phone from the same height. Compare their speed and kinetic energy when they land.',
+      hint: 'Use the Phone mass slider, or add a case.',
+      note: 'Which one hit faster? Which one had more kinetic energy? What does that tell you about mass?',
+      check: function (t) { return anyPair(t, function (a, b) { return Math.abs(a.h - b.h) < 0.005 && Math.abs(a.totalG - b.totalG) >= 40; }); } },
+    { id: 'surfaces', title: 'Change the landing',
+      task: 'Drop the same phone from the same height onto three different surfaces. Look at the squish distance and the peak force each time.',
+      hint: '',
+      note: 'How did squish distance and peak force change from the hardest surface to the softest? Why does that matter for the glass?',
+      check: function (t) {
+        var g = {};
+        t.forEach(function (x) { var k = x.h.toFixed(3) + '|' + x.totalG + '|' + x.caseId; (g[k] = g[k] || {})[x.surface] = 1; });
+        return Object.keys(g).some(function (k) { return Object.keys(g[k]).length >= 3; });
+      } },
+    { id: 'save', title: 'Save the screen',
+      task: 'With thin glass, drop the phone from 2 m or higher without cracking the screen. You may change anything except the glass and the height.',
+      hint: 'There is more than one way. See if you can find two.',
+      note: 'What did you change? Use the words deformation and peak force to explain why it worked.',
+      check: function (t) { return t.some(function (x) { return x.glass === 'thin' && x.h >= 1.995 && !x.cracked; }); } },
+    { id: 'same', title: 'Same energy, different result',
+      task: 'Find two drops with almost the same kinetic energy (within about 10%) and the same glass, where one screen cracks and the other survives.',
+      hint: 'Try the same height on two different surfaces.',
+      note: 'If the kinetic energy is the same, what made the difference?',
+      check: function (t) { return anyPair(t, function (a, b) {
+        return a.glass === b.glass && a.cracked && !b.cracked && Math.abs(a.KE - b.KE) / Math.max(a.KE, b.KE) <= 0.10; }); } },
+    { id: 'break', title: 'Find the breaking point',
+      task: 'Choose Mystery glass. Keep dropping until you know its breaking point to within 150 N: the biggest peak force it survived and the smallest peak force that cracked it.',
+      hint: 'Change one thing at a time. Each drop tells you whether the breaking point is above or below that peak force.',
+      note: 'How did you decide what to try next? What is your best estimate of the breaking point?',
+      check: function (t) {
+        var hi = -1, lo = Infinity;
+        t.forEach(function (x) { if (x.glass !== 'mystery') return; if (x.cracked) lo = Math.min(lo, x.F); else hi = Math.max(hi, x.F); });
+        return hi > 0 && lo < Infinity && lo > hi && (lo - hi) <= 150;
+      } }
+  ];
+
+  var api = { G: G, SURFACES: SURFACES, CASES: CASES, GLASSES: GLASSES, MISSIONS: MISSIONS,
+              compute: compute, timeline: timeline, restState: restState, readyState: readyState, newMystery: newMystery, pick: pick };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  return api;
+})();
+
+/* ===== Drawing: canvas scenes and the phone-screen picture ===== */
+var Draw = (function () {
+  'use strict';
+  var C = {};
+  var MONO = '"DM Mono", ui-monospace, Menlo, Consolas, monospace';
+  var SANS = '"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif';
+  var TEX = {};
+
+  function readTheme() {
+    var cs = getComputedStyle(document.documentElement);
+    function g(n) { return cs.getPropertyValue(n).trim() || '#888'; }
+    C = { ink: g('--ink'), ink2: g('--ink-2'), line: g('--line'), panel: g('--panel'), panel2: g('--panel-2'), accent: g('--accent'),
+          stage: g('--stage'), pe: g('--pe'), ke: g('--ke'), sq: g('--sq'), ht: g('--ht'), ok: g('--ok'), bad: g('--bad') };
+    return C;
+  }
+  function dprNow() { return Math.min(window.devicePixelRatio || 1, 2); }
+  function fit(cv) {
+    var r = cv.getBoundingClientRect(), dpr = dprNow();
+    var w = Math.max(160, Math.round(r.width)), h = Math.max(140, Math.round(r.height));
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    var g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { g: g, w: w, h: h };
+  }
+  function rng(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function rr(g, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  }
+
+  /* ---- surface textures (painted once, then stretched, which is exactly what squishing looks like) ---- */
+  var SURF = {
+    concrete: { base: '#8b9298', dark: '#6b7278' }, tile: { base: '#d5dee2', dark: '#a3b2b9' },
+    wood: { base: '#b98450', dark: '#8f6236' }, carpet: { base: '#5f82ab', dark: '#46668c' },
+    grass: { base: '#5aa048', dark: '#3f7f31' }, foam: { base: '#88bccb', dark: '#5f97a8' }
+  };
+  function paintSurface(g, w, h, id) {
+    var S = SURF[id] || SURF.tile, r = rng(id.length * 977 + w), i;
+    g.fillStyle = S.base; g.fillRect(0, 0, w, h);
+    if (id === 'concrete') {
+      for (i = 0; i < w * h / 45; i++) { g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,.30)' : 'rgba(0,0,0,.24)'; g.fillRect(r() * w, r() * h, 1.7, 1.7); }
+    } else if (id === 'tile') {
+      g.strokeStyle = S.dark; g.lineWidth = 2;
+      for (var tx = 30; tx < w; tx += 68) { g.beginPath(); g.moveTo(tx, 0); g.lineTo(tx, h); g.stroke(); }
+      for (var ty = Math.max(24, h * 0.5); ty < h; ty += Math.max(40, h * 0.5)) { g.beginPath(); g.moveTo(0, ty); g.lineTo(w, ty); g.stroke(); }
+      g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(0, 0, w, 3);
+    } else if (id === 'wood') {
+      g.strokeStyle = S.dark; g.lineWidth = 1.5;
+      for (var wy = 16; wy < h; wy += 18) { g.beginPath(); g.moveTo(0, wy); g.lineTo(w, wy); g.stroke(); }
+      g.lineWidth = 1; g.globalAlpha = 0.35;
+      for (i = 0; i < w / 5; i++) { var gx = r() * w, gy = r() * h; g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx + 12 + r() * 26, gy + (r() - 0.5) * 2); g.stroke(); }
+      g.globalAlpha = 1;
+    } else if (id === 'carpet') {
+      for (i = 0; i < w * h / 12; i++) {
+        g.strokeStyle = r() < 0.5 ? S.dark : 'rgba(255,255,255,.35)';
+        var fx = r() * w, fy = r() * h; g.beginPath(); g.moveTo(fx, fy); g.lineTo(fx + (r() - 0.5) * 2, fy + 5); g.stroke();
+      }
+    } else if (id === 'grass') {
+      g.fillStyle = '#6a4c2f'; g.fillRect(0, Math.min(22, h * 0.4), w, h);
+      for (i = 0; i < w / 2.2; i++) {
+        var bx = i * 2.2 + r() * 2, top = r() * 7;
+        g.fillStyle = r() < 0.5 ? '#4b8f3d' : '#66ae52';
+        g.beginPath(); g.moveTo(bx, Math.min(26, h * 0.45)); g.lineTo(bx + 1.5, top); g.lineTo(bx + 3, Math.min(26, h * 0.45)); g.fill();
+      }
+    } else if (id === 'foam') {
+      g.fillStyle = 'rgba(255,255,255,.30)'; g.fillRect(0, 0, w, 4);
+      g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 1.2;
+      for (i = 0; i < w * h / 500; i++) { g.beginPath(); g.arc(r() * w, r() * h, 2 + r() * 3.5, 0, 6.283); g.stroke(); }
+    }
+  }
+  function surfaceTex(id, w, h) {
+    var dpr = dprNow(), key = id + '|' + Math.round(w) + '|' + Math.round(h) + '|' + dpr;
+    if (!TEX[key]) {
+      var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * dpr)); c.height = Math.max(1, Math.round(h * dpr));
+      var g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); paintSurface(g, w, h, id); TEX[key] = c;
+    }
+    return TEX[key];
+  }
+
+  /* ---- cracks: jagged lines that grow with t (0..1) ---- */
+  function crackGeom(seed, n, x, y, w, h) {
+    var r = rng(seed), out = [];
+    for (var i = 0; i < n; i++) {
+      var px = x + w * (0.15 + 0.7 * r()), pts = [[px, y]];
+      for (var k = 1; k <= 5; k++) { px += (r() - 0.5) * w * 0.16; pts.push([px, y + h * k / 5]); }
+      out.push(pts);
+    }
+    return out;
+  }
+  function cracks(g, x, y, w, h, t, seed, n, color) {
+    var geo = crackGeom(seed, n, x, y, w, h);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (var pass = 0; pass < 2; pass++) {
+      g.strokeStyle = pass === 0 ? 'rgba(255,255,255,.9)' : color; g.lineWidth = pass === 0 ? 3.2 : 1.6;
+      for (var i = 0; i < geo.length; i++) {
+        var pts = geo[i], total = (pts.length - 1) * t;
+        g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+        for (var k = 1; k < pts.length; k++) {
+          if (k - 1 >= total) break;
+          var frac = Math.min(1, total - (k - 1)), a = pts[k - 1], b = pts[k];
+          g.lineTo(a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac);
+        }
+        g.stroke();
+      }
+    }
+  }
+
+  /* ---- phone, seen from the side ---- */
+  function phoneIcon(g, cx, yBot, o) {
+    var w = 74, hh = 14, pad = o.caseId !== 'none' ? 3 : 0, x = cx - w / 2, y = yBot - pad - hh;
+    var colors = { thin: '#9aa7ae', rubber: '#e0623b', bumper: '#7d4fd0' };
+    if (pad) {
+      g.fillStyle = colors[o.caseId] || '#999'; rr(g, x - 4, y - 3, w + 8, hh + 6, 6); g.fill();
+      if (o.caseId === 'bumper') { g.fillStyle = 'rgba(255,255,255,.55)'; for (var d = 0; d < 6; d++) { g.beginPath(); g.arc(x - 1 + d * 15, yBot - 1.5, 1.6, 0, 6.283); g.fill(); } }
+    }
+    g.fillStyle = '#26343c'; rr(g, x, y, w, hh, 4); g.fill();
+    g.fillStyle = '#3c4c56'; rr(g, x + w - 22, y - 3, 14, 4, 2); g.fill();
+    g.fillStyle = o.cracked ? '#e6f1f6' : '#8fd2f2'; rr(g, x + 2, y + hh - 4, w - 4, 3, 1.5); g.fill();
+    if (o.cracked) {
+      g.strokeStyle = '#c62f3b'; g.lineWidth = 1.4; g.lineCap = 'round';
+      var r = rng(5);
+      for (var i = 0; i < 6; i++) { var sx = x + 12 + r() * (w - 24); g.beginPath(); g.moveTo(sx, y + hh - 5); g.lineTo(sx + (r() - 0.5) * 12, y + hh - 1); g.lineTo(sx + (r() - 0.5) * 16, y + hh + 2); g.stroke(); }
+    }
+  }
+
+  /* ---- the drop stage ---- */
+  function drawStage(cv, st, cx) {
+    var f = fit(cv), g = f.g, W = f.w, H = f.h, P = cx.params;
+    g.fillStyle = C.stage; g.fillRect(0, 0, W, H);
+    var surfH = Math.round(Math.min(66, H * 0.17)), floorY = H - surfH, topY = 34, ppm = (floorY - topY) / 3.2, rx = 46;
+    var cx0 = rx + 20 + (W - rx - 30) / 2;
+    g.save();
+    if (cx.shake) g.translate((Math.random() - 0.5) * cx.shake, (Math.random() - 0.5) * cx.shake);
+
+    g.strokeStyle = C.line; g.lineWidth = 1; g.globalAlpha = 0.6;
+    for (var m = 0.5; m <= 3.001; m += 0.5) { var yy = Math.round(floorY - m * ppm) + 0.5; g.beginPath(); g.moveTo(rx + 10, yy); g.lineTo(W, yy); g.stroke(); }
+    g.globalAlpha = 1;
+
+    g.strokeStyle = C.ink2; g.lineWidth = 1.5; g.beginPath(); g.moveTo(rx, floorY); g.lineTo(rx, floorY - 3.2 * ppm); g.stroke();
+    g.font = '11px ' + MONO; g.fillStyle = C.ink2; g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (var t = 0; t <= 32; t++) {
+      var ty = floorY - t * 0.1 * ppm, major = t % 5 === 0;
+      g.beginPath(); g.moveTo(rx, ty); g.lineTo(rx + (major ? 9 : 4), ty); g.stroke();
+      if (major) g.fillText(t === 0 ? '0' : (t / 10).toFixed(1), rx - 6, ty);
+    }
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText('height (m)', 8, 16);
+
+    var dy = floorY - P.h * ppm;
+    g.setLineDash([5, 4]); g.strokeStyle = C.accent; g.lineWidth = 1.5; g.beginPath(); g.moveTo(rx + 10, dy); g.lineTo(cx0 - 52, dy); g.stroke(); g.setLineDash([]);
+    g.fillStyle = C.accent; g.font = '500 12px ' + MONO; g.fillText(P.h.toFixed(2) + ' m', rx + 14, dy - 6);
+
+    var sh = 0.6 + 0.4 * (1 - Math.min(1, st.y / 3.2));
+    g.fillStyle = 'rgba(0,0,0,.20)'; g.beginPath(); g.ellipse(cx0, floorY + 3, 34 * sh, 4 * sh, 0, 0, 6.283); g.fill();
+    g.drawImage(surfaceTex(P.surface, W, surfH), 0, floorY, W, surfH);
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, floorY, W, 1.5);
+
+    var yBot = floorY - st.y * ppm + (st.s || 0) * 3;
+    if (st.kind === 'fall' && st.v > 0.4) {
+      var L = Math.min(46, st.v * 5.5); g.strokeStyle = C.ink2; g.globalAlpha = 0.45; g.lineWidth = 2; g.lineCap = 'round';
+      for (var q = -1; q <= 1; q++) { g.beginPath(); g.moveTo(cx0 + q * 18, yBot - 26); g.lineTo(cx0 + q * 18, yBot - 26 - L); g.stroke(); }
+      g.globalAlpha = 1;
+    }
+    phoneIcon(g, cx0, yBot, { caseId: P.caseId, cracked: st.crackT > 0.15 });
+
+    if (st.kind === 'compress' || st.kind === 'release') {
+      var p = st.kind === 'compress' ? st.u * 0.5 : 0.5 + st.u * 0.5;
+      g.strokeStyle = C.accent; g.lineWidth = 2;
+      for (var k = 0; k < 2; k++) {
+        var pp = p - k * 0.16; if (pp <= 0) continue;
+        g.globalAlpha = Math.max(0, (1 - pp) * 0.7); g.beginPath(); g.ellipse(cx0, floorY, 16 + pp * 70, 4 + pp * 12, 0, Math.PI, 6.283); g.stroke();
+      }
+      g.globalAlpha = 1;
+    }
+    if (cx.flash > 0.02) {
+      g.globalAlpha = Math.min(1, cx.flash); g.font = '800 26px ' + SANS; g.fillStyle = C.bad; g.textAlign = 'center';
+      g.fillText('CRACK!', cx0, Math.max(30, yBot - 46 - (1 - cx.flash) * 16)); g.textAlign = 'left'; g.globalAlpha = 1;
+    }
+    g.restore();
+  }
+
+  /* a dark rounded label so text reads on any surface color */
+  function pill(g, text, x, cy, font) {
+    g.save();
+    g.font = font; g.textAlign = 'left'; g.textBaseline = 'middle';
+    var w = Math.ceil(g.measureText(text).width) + 12, h = 18;
+    g.fillStyle = 'rgba(8,24,32,.74)'; rr(g, x, cy - h / 2, w, h, 9); g.fill();
+    g.fillStyle = '#fff'; g.fillText(text, x + 6, cy + 0.5);
+    g.restore();
+  }
+
+  /* ---- the zoomed cross-section ---- */
+  function drawZoom(cv, st, cx) {
+    var f = fit(cv), g = f.g, W = f.w, H = f.h, P = cx.params, res = cx.res;
+    g.fillStyle = C.stage; g.fillRect(0, 0, W, H);
+    var s = st.s || 0, F = st.F || 0;
+    var parts = res ? res.parts : { phone: 0, cushion: 0, surface: 0 };
+    var leftW = 92, rightW = 66, x0 = leftW + 4, x1 = W - rightW, base = H - 12;
+    var hasCase = P.caseId !== 'none';
+    var restS = Math.round(Math.min(140, H * 0.38)), restC = hasCase ? 34 : 0, restB = 60, glassH = 12;
+    function sqpx(mm, cap) { return Math.min(cap, 9 * Math.pow(Math.max(0, mm), 0.62)); }
+    var pxS = sqpx(parts.surface * s, restS * 0.82), pxC = restC ? sqpx(parts.cushion * s, restC * 0.85) : 0, pxP = 0.4 * sqpx(parts.phone * s, restB * 0.7);
+    var sTop = base - (restS - pxS), cTop = sTop - (restC - pxC), gBot = cTop, gTop = gBot - glassH, bBot = gTop, bTop = bBot - (restB - pxP);
+    var cracked = st.crackT > 0;
+
+    // surface chunk (stretches with the squish)
+    g.drawImage(surfaceTex(P.surface, x1 - x0 + 24, restS), x0 - 12, sTop, x1 - x0 + 24, restS - pxS);
+    g.fillStyle = 'rgba(0,0,0,.16)'; g.fillRect(x0 - 12, base, x1 - x0 + 24, 1.5);
+    if (cx.surfaceName) pill(g, cx.surfaceName, x0 - 6, Math.min(base - 14, sTop + (restS - pxS) / 2), '700 12px ' + SANS);
+
+    // case cushion
+    if (restC) {
+      var cc = { thin: '#9aa7ae', rubber: '#e0623b', bumper: '#7d4fd0' }[P.caseId];
+      g.fillStyle = cc; rr(g, x0, cTop, x1 - x0, restC - pxC, 5); g.fill();
+      if (P.caseId === 'bumper') { g.fillStyle = 'rgba(255,255,255,.45)'; for (var d = x0 + 12; d < x1 - 6; d += 16) { g.beginPath(); g.arc(d, cTop + (restC - pxC) / 2, Math.min(4, (restC - pxC) / 3), 0, 6.283); g.fill(); } }
+      if (restC - pxC > 24) pill(g, 'Case', x0 + 6, cTop + (restC - pxC) / 2, '700 12px ' + SANS);
+    }
+
+    // screen glass
+    var bend = (res && !cracked) ? Math.min(1, F / res.brk) * 6 : 0;
+    g.fillStyle = cracked ? '#e9f3f8' : '#8fd2f2'; g.beginPath(); g.moveTo(x0, gTop); g.lineTo(x1, gTop); g.lineTo(x1, gBot);
+    g.quadraticCurveTo((x0 + x1) / 2, gBot - 2 * bend, x0, gBot); g.closePath(); g.fill();
+    if (cracked) cracks(g, x0, gTop - 4, x1 - x0, glassH + 9, Math.min(1, st.crackT), cx.seed || 3, 7, C.bad);
+    g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, gTop); g.lineTo(x1, gTop); g.stroke();
+
+    // phone body
+    g.fillStyle = '#26343c'; rr(g, x0, bTop, x1 - x0, bBot - bTop, 6); g.fill();
+    g.fillStyle = '#fff'; g.font = '700 12px ' + SANS; g.textBaseline = 'middle'; g.fillText('Phone', x0 + 8, (bTop + bBot) / 2);
+
+    // labels on the right
+    g.fillStyle = C.ink2; g.font = '12px ' + SANS; g.textAlign = 'left';
+    g.fillText('screen', x1 + 8, gTop + glassH / 2 - 7); g.fillText('glass', x1 + 8, gTop + glassH / 2 + 7);
+    g.strokeStyle = C.ink2; g.lineWidth = 1; g.beginPath(); g.moveTo(x1 + 2, gTop + glassH / 2); g.lineTo(x1 + 7, gTop + glassH / 2); g.stroke();
+
+    g.fillStyle = C.ink2; g.font = '11px ' + SANS; g.textAlign = 'right'; g.textBaseline = 'alphabetic';
+    g.fillText('Squish is exaggerated', W - 8, 16);
+
+    // action-reaction arrows
+    var ax = 46;
+    if (res && F > 1) {
+      var yI = gBot, Lmax = Math.max(20, Math.min(72, yI - 44, H - 32 - yI));
+      var L = Math.min(Lmax, 10 + 62 * Math.pow(Math.min(1, F / 3500), 0.7));
+      g.strokeStyle = C.accent; g.fillStyle = C.accent; g.lineWidth = 4; g.lineCap = 'butt';
+      arrow(g, ax, yI - 1, ax, yI - 1 - L); arrow(g, ax, yI + 1, ax, yI + 1 + L);
+      g.fillStyle = C.ink; g.font = '11px ' + SANS; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      var cxA = ax + 2;
+      g.fillText('Floor pushes', cxA, yI - L - 24); g.fillText('up on phone', cxA, yI - L - 11);
+      g.fillText('Phone pushes', cxA, yI + L + 16); g.fillText('down on floor', cxA, yI + L + 29);
+      g.font = '500 12px ' + MONO; g.textAlign = 'left'; g.fillText(Math.round(F).toLocaleString('en-US') + ' N', ax + 12, yI + 4);
+    } else {
+      g.fillStyle = C.ink2; g.font = '12px ' + SANS; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      g.fillText('Force arrows', ax + 2, gBot - 16); g.fillText('show up here', ax + 2, gBot - 3);
+    }
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  }
+  function arrow(g, x1, y1, x2, y2) {
+    var a = Math.atan2(y2 - y1, x2 - x1), hl = 12, hw = 7;
+    var bx = x2 - Math.cos(a) * hl, by = y2 - Math.sin(a) * hl;
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(bx, by); g.stroke();
+    g.beginPath(); g.moveTo(x2, y2); g.lineTo(bx + Math.sin(a) * hw, by - Math.cos(a) * hw); g.lineTo(bx - Math.sin(a) * hw, by + Math.cos(a) * hw); g.closePath(); g.fill();
+  }
+
+  /* ---- the phone screen picture in the verdict (front view) ---- */
+  function phoneScreen(cracked, ratio, seed) {
+    var r = rng(seed || 7), id = 'scr' + (seed || 7), i, s = '';
+    s += '<svg viewBox="0 0 84 168" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="' + (cracked ? 'Phone screen with cracks' : 'Phone screen, no damage') + '">';
+    s += '<defs><clipPath id="' + id + '"><rect x="6" y="6" width="72" height="156" rx="8"/></clipPath></defs>';
+    s += '<rect x="1" y="1" width="82" height="166" rx="12" fill="#1f2c33" stroke="#0b1418" stroke-width="2"/>';
+    s += '<rect x="6" y="6" width="72" height="156" rx="8" fill="#2d6f8f"/>';
+    var cols = ['#f4b942', '#e9724c', '#5fc9a0', '#8e7cf3', '#57b4f0', '#f28fb2'];
+    for (i = 0; i < 12; i++) s += '<rect x="' + (14 + (i % 3) * 22) + '" y="' + (34 + Math.floor(i / 3) * 24) + '" width="16" height="16" rx="4" fill="' + cols[(i * 5) % 6] + '" opacity=".92"/>';
+    s += '<rect x="30" y="10" width="24" height="4" rx="2" fill="#0b1418" opacity=".7"/>';
+    if (!cracked) {
+      s += '<polygon points="6,6 44,6 6,72" fill="#fff" opacity=".13" clip-path="url(#' + id + ')"/>';
+    } else {
+      var ox = 22 + r() * 40, oy = 40 + r() * 80, n = Math.max(6, Math.min(14, 6 + Math.round((ratio - 1) * 9))), path = '', ring1 = [], ring2 = [];
+      for (i = 0; i < n; i++) {
+        var a = (i / n) * 6.283 + (r() - 0.5) * 0.4, len = 26 + r() * 50 + Math.min(1.5, ratio - 1) * 22, x = ox, y = oy;
+        path += 'M' + ox.toFixed(1) + ' ' + oy.toFixed(1);
+        for (var k = 1; k <= 4; k++) {
+          a += (r() - 0.5) * 0.35; x += Math.cos(a) * len / 4; y += Math.sin(a) * len / 4; path += 'L' + x.toFixed(1) + ' ' + y.toFixed(1);
+          if (k === 1) ring1.push(x.toFixed(1) + ',' + y.toFixed(1)); if (k === 2) ring2.push(x.toFixed(1) + ',' + y.toFixed(1));
+        }
+      }
+      s += '<g clip-path="url(#' + id + ')" fill="none" stroke-linecap="round" stroke-linejoin="round">';
+      s += '<path d="' + path + '" stroke="#0b1418" stroke-opacity=".55" stroke-width="3"/>';
+      s += '<polygon points="' + ring1.join(' ') + '" stroke="#0b1418" stroke-opacity=".45" stroke-width="2.6"/>';
+      s += '<polygon points="' + ring2.join(' ') + '" stroke="#0b1418" stroke-opacity=".45" stroke-width="2.6"/>';
+      s += '<path d="' + path + '" stroke="#f4fbff" stroke-width="1.3"/>';
+      s += '<polygon points="' + ring1.join(' ') + '" stroke="#f4fbff" stroke-width="1.1"/>';
+      s += '<polygon points="' + ring2.join(' ') + '" stroke="#f4fbff" stroke-width="1.1"/></g>';
+    }
+    return s + '</svg>';
+  }
+
+  return { readTheme: readTheme, fit: fit, drawStage: drawStage, drawZoom: drawZoom, phoneScreen: phoneScreen, colors: function () { return C; } };
+})();
+
+(function () {
+'use strict';
+/* ===== App part 1: state, controls, drop animation, result card ===== */
+function $(id) { return document.getElementById(id); }
+function fmt(n, d) { return Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function fmtN(n) { return Math.round(n).toLocaleString('en-US'); }
+function reduceMotion() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+
+var state = {
+  params: { h: 1.0, phoneG: 180, surface: 'tile', caseId: 'none', glass: 'thin' },
+  mystery: LAB.newMystery(), revealed: false,
+  trials: [], res: null, running: false, anim: null, pendingResult: null, pendingPred: null,
+  seed: 11, flash: 0, shake: 0, pred: { right: 0, total: 0 }, done: {}
+};
+var barEls = {};
+
+function surfName(id) { return LAB.pick(LAB.SURFACES, id || state.params.surface).name; }
+function caseName(id) { return LAB.pick(LAB.CASES, id || state.params.caseId).name; }
+function glassName(id) { return id === 'mystery-old' ? 'Old mystery' : LAB.pick(LAB.GLASSES, id).name; }
+function breakN() {
+  if (state.params.glass === 'mystery') return state.mystery;
+  return LAB.pick(LAB.GLASSES, state.params.glass).breakN;
+}
+function currentInput() {
+  var p = state.params;
+  return { h: p.h, phoneG: p.phoneG, surface: p.surface, caseId: p.caseId, breakN: breakN() };
+}
+
+/* ---------- controls ---------- */
+function optCard(name, value, title, sub, lead) {
+  var l = document.createElement('label');
+  l.className = 'opt';
+  l.innerHTML = '<input type="radio" name="' + name + '" value="' + value + '">' + lead + '<span><b>' + title + '</b><small>' + sub + '</small></span>';
+  return l;
+}
+function buildOptions() {
+  var sg = $('surfaceGroup'), cg = $('caseGroup'), gg = $('glassGroup');
+  LAB.SURFACES.forEach(function (s) { sg.appendChild(optCard('surface', s.id, s.name, s.feel, '<i class="sw sw-' + s.id + '"></i>')); });
+  LAB.CASES.forEach(function (c) { cg.appendChild(optCard('case', c.id, c.name, c.sub, '')); });
+  var sub = { thin: 'weaker', thick: 'stronger', mystery: 'unknown' };
+  LAB.GLASSES.forEach(function (g) { gg.appendChild(optCard('glass', g.id, g.name, sub[g.id], '')); });
+}
+function syncOptionStates() {
+  ['surface', 'case', 'glass'].forEach(function (name) {
+    var val = name === 'case' ? state.params.caseId : state.params[name];
+    var inputs = document.querySelectorAll('input[name="' + name + '"]');
+    for (var i = 0; i < inputs.length; i++) { inputs[i].checked = inputs[i].value === val; inputs[i].parentNode.classList.toggle('on', inputs[i].checked); }
+  });
+}
+function updateLabels() {
+  var p = state.params, cs = LAB.pick(LAB.CASES, p.caseId);
+  $('outHeight').textContent = fmt(p.h, 2) + ' m';
+  $('outMass').textContent = p.phoneG + ' g' + (cs.add ? ' (' + (p.phoneG + cs.add) + ' g with case)' : '');
+  var gi = $('glassInfo'), mt = $('mysteryTools');
+  if (p.glass === 'mystery') {
+    gi.innerHTML = state.revealed ? 'Breaking point: <b>' + fmtN(state.mystery) + ' N</b> (revealed)' : 'Breaking point: <b>hidden</b>. Find it by testing.';
+    mt.hidden = false; $('btnReveal').hidden = state.revealed;
+  } else {
+    gi.innerHTML = 'Breaking point: <b>' + fmtN(breakN()) + ' N</b>'; mt.hidden = true;
+  }
+}
+function onControlChange() {
+  if (state.running) return;
+  var p = state.params, s = document.querySelector('input[name="surface"]:checked'), c = document.querySelector('input[name="case"]:checked'), g = document.querySelector('input[name="glass"]:checked');
+  p.h = parseFloat($('inHeight').value); p.phoneG = parseInt($('inMass').value, 10);
+  if (s) p.surface = s.value; if (c) p.caseId = c.value; if (g) p.glass = g.value;
+  state.res = null;            // a fresh phone is loaded
+  hidePredict(); syncOptionStates(); updateLabels(); showReady();
+}
+function nudge(id, delta) {
+  var el = $(id), v = Math.round((parseFloat(el.value) + delta) * 100) / 100;
+  el.value = Math.min(parseFloat(el.max), Math.max(parseFloat(el.min), v)); onControlChange();
+}
+
+/* ---------- what the stage shows when nothing is moving ---------- */
+function currentDisplayState() {
+  var st;
+  if (state.res) { st = LAB.restState(state.res); st.E0 = state.res.E0; st.kind = 'rest'; }
+  else { st = LAB.readyState({ h: state.params.h, phoneG: state.params.phoneG, caseId: state.params.caseId }); st.kind = 'ready'; }
+  st.u = 1; st.v = 0; return st;
+}
+function draw(st) {
+  var cx = { params: state.params, res: state.res, seed: state.seed, flash: state.flash, shake: state.shake, surfaceName: surfName() };
+  Draw.drawStage($('cvStage'), st, cx);
+  Draw.drawZoom($('cvZoom'), st, cx);
+  $('liveH').textContent = fmt(st.y, 2) + ' m';
+  $('liveV').textContent = fmt(st.v || 0, 2) + ' m/s';
+  $('liveT').textContent = fmt(st.t || 0, 2) + ' s';
+  var E0 = st.E0 || (state.res && state.res.E0) || 1;
+  setBar('pe', st.pe, E0); setBar('ke', st.ke, E0); setBar('sq', st.sq, E0); setBar('ht', st.ht, E0);
+  $('barTotal').textContent = fmt(E0, 2) + ' J';
+}
+function setBar(k, val, E0) {
+  var b = barEls[k];
+  b.fill.style.transform = 'scaleX(' + Math.max(0, Math.min(1, val / E0)) + ')';
+  b.num.textContent = fmt(val, 2) + ' J';
+}
+function showReady() {
+  draw(currentDisplayState());
+  $('cvStage').setAttribute('aria-label', 'Phone ready to drop from ' + fmt(state.params.h, 2) + ' meters onto ' + surfName().toLowerCase());
+  updateMath();
+}
+
+/* ---------- the drop ---------- */
+function setRunningUI(on) {
+  var els = document.querySelectorAll('.controls input, .controls button, #optPredict');
+  for (var i = 0; i < els.length; i++) els[i].disabled = on;
+  $('btnDrop').textContent = on ? 'Skip animation' : 'Drop it!';
+  $('stageCard').setAttribute('aria-busy', on ? 'true' : 'false');
+}
+function requestDrop() {
+  if (state.running) { finishNow(); return; }
+  if ($('optPredict').checked && state.pendingPred === null && $('predictBox').hidden) { showPredict(); return; }
+  if (!$('predictBox').hidden) return;
+  beginDrop();
+}
+function scrollStageIntoView() {
+  var r = $('stageCard').getBoundingClientRect(), vis = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
+  if (vis < Math.min(r.height, window.innerHeight) * 0.7) $('stageCard').scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+}
+function beginDrop() {
+  var pred = state.pendingPred; state.pendingPred = null; hidePredict();
+  var res = LAB.compute(currentInput());
+  res.breakKnown = state.params.glass !== 'mystery' || state.revealed;
+  res.glass = state.params.glass;
+  state.res = res; state.seed += 7;
+  state.pendingResult = { res: res, pred: pred };
+  scrollStageIntoView();
+  if (!$('optAnim').checked) { instantFinish(); return; }
+  var now = performance.now();
+  state.anim = { res: res, segs: LAB.timeline(res, $('optSlow').checked ? 0.35 : 1), i: 0, t0: now, last: now, revealed: false, crackFired: false, impactFired: false };
+  state.running = true; setRunningUI(true);
+  requestAnimationFrame(tick);
+}
+function tick(now) {
+  var a = state.anim; if (!a) return;
+  var dt = Math.min(0.05, (now - a.last) / 1000); a.last = now;
+  state.flash = Math.max(0, state.flash - dt / 0.9); state.shake = Math.max(0, state.shake - dt * 40);
+  var seg = a.segs[a.i], u = Math.min(1, (now - a.t0) / 1000 / seg.dur);
+  var st = seg.at(u); st.kind = seg.kind; st.u = u; st.v = Math.sqrt(2 * st.ke / a.res.m); st.E0 = a.res.E0;
+  if (seg.kind === 'compress' && !a.impactFired) { a.impactFired = true; sfx('thud', a.res); }
+  if (seg.kind === 'compress' && a.res.cracked && !a.crackFired && st.crackT > 0) { a.crackFired = true; state.flash = 1; state.shake = 6; sfx('crack', a.res); }
+  if (seg.kind !== 'fall' && seg.kind !== 'compress' && !a.revealed) { a.revealed = true; revealResult(); }
+  draw(st);
+  if (u >= 1) { a.i++; a.t0 = now; if (a.i >= a.segs.length) { endAnimation(); return; } }
+  requestAnimationFrame(tick);
+}
+function endAnimation() {
+  state.anim = null; state.running = false; state.flash = 0; state.shake = 0;
+  revealResult(); setRunningUI(false); draw(currentDisplayState());
+  $('btnDrop').focus({ preventScroll: true });
+}
+function finishNow() { if (state.anim) endAnimation(); }
+function instantFinish() {
+  state.running = false; state.flash = 0; state.shake = 0;
+  sfx('thud', state.res); if (state.res.cracked) sfx('crack', state.res);
+  revealResult(); draw(currentDisplayState());
+}
+
+/* ---------- result card ---------- */
+function toTrial(res, pred, n) {
+  return { n: n, h: res.h, phoneG: res.phoneG, totalG: res.totalG, surface: res.surface, caseId: res.caseId, glass: res.glass,
+           v: res.v, KE: res.KE, xmm: res.xmm, F: res.F, brk: res.brk, breakKnown: res.breakKnown, cracked: res.cracked,
+           ratio: res.ratio, weight: res.weight, pred: pred };
+}
+function revealResult() {
+  var pr = state.pendingResult; if (!pr) return; state.pendingResult = null;
+  var t = toTrial(pr.res, pr.pred, state.trials.length + 1);
+  state.trials.push(t);
+  var predText = null;
+  if (pr.pred) {
+    var ok = (pr.pred === 'crack') === t.cracked; state.pred.total++; if (ok) state.pred.right++;
+    predText = 'You predicted the screen would ' + (pr.pred === 'crack' ? 'crack' : 'survive') + '. ' + (ok ? 'You got it.' : 'Not this time. Look at the peak force and the squish to see why.');
+  }
+  renderResult(t, { example: false, predText: predText });
+  renderTrials(); renderGraphs(); checkMissions(true); updateScore(); updateMath();
+  $('srLive').textContent = 'Drop ' + t.n + ': ' + fmt(t.h, 2) + ' meters onto ' + surfName(t.surface).toLowerCase() + '. Speed ' + fmt(t.v, 1) + ' meters per second, kinetic energy ' +
+    fmt(t.KE, 2) + ' joules, peak force ' + fmtN(t.F) + ' newtons. The screen ' + (t.cracked ? 'cracked.' : 'survived.');
+}
+function renderResult(t, o) {
+  var known = t.breakKnown, cracked = t.cracked, F = fmtN(t.F), txt;
+  $('exTag').hidden = !o.example;
+  $('verdict').classList.toggle('bad', cracked);
+  $('vPhone').innerHTML = Draw.phoneScreen(cracked, t.ratio, 100 + t.n * 13);
+  $('vTitle').textContent = cracked ? 'The screen cracked' : 'The screen survived';
+  if (known) {
+    var B = fmtN(t.brk);
+    txt = cracked ? 'The peak force (' + F + ' N) went past the glass’s breaking point (' + B + ' N).'
+                  : 'The peak force (' + F + ' N) stayed below the glass’s breaking point (' + B + ' N), so the glass bent a little and went back to its original shape. That is temporary deformation.';
+    if (!cracked && t.ratio >= 0.9) txt += ' That was close: ' + Math.round(t.ratio * 100) + '% of what the glass can take.';
+    if (cracked && t.ratio < 1.03) txt += ' It missed by only ' + Math.max(1, Math.round(t.F - t.brk)) + ' N.';
+  } else {
+    txt = cracked ? 'The glass cracked at a peak force of ' + F + ' N, so its breaking point is lower than that.'
+                  : 'The glass survived a peak force of ' + F + ' N, so its breaking point is higher than that.';
+  }
+  $('vText').textContent = txt;
+  $('vWhy').textContent = 'The phone hit at ' + fmt(t.v, 1) + ' m/s with ' + fmt(t.KE, 2) + ' J of kinetic energy. All of it had to be stopped within about ' + fmt(t.xmm, 1) +
+    ' mm of squish. ' + (t.xmm < 6 ? 'A short stopping distance means a big peak force.' : 'A longer stopping distance means a smaller peak force.');
+  $('stV').textContent = fmt(t.v, 2) + ' m/s'; $('stKE').textContent = fmt(t.KE, 2) + ' J'; $('stX').textContent = fmt(t.xmm, 1) + ' mm';
+  $('stF').textContent = F + ' N'; $('stB').textContent = known ? fmtN(t.brk) + ' N' : 'hidden';
+  var max = Math.max(t.F, known ? t.brk : t.F) * 1.15;
+  $('meter').classList.toggle('bad', cracked);
+  $('mtFill').style.transform = 'scaleX(' + (t.F / max) + ')';
+  var mk = $('mtMark'); mk.hidden = !known; if (known) mk.style.left = (t.brk / max * 100) + '%';
+  $('mtF').textContent = 'Peak force ' + F + ' N';
+  $('mtB').textContent = known ? 'Glass breaking point ' + fmtN(t.brk) + ' N' : 'Breaking point hidden';
+  renderFX(t, known, !o.example);
+  var pe = $('predResult'); pe.hidden = !o.predText; pe.textContent = o.predText || '';
+}
+function renderFX(t, known, animate) {
+  var W = 440, H = 250, L = 58, R = 14, T = 14, B = 44, pw = W - L - R, ph = H - T - B, XM = 36, YM = 3600, s = '', i;
+  function X(mm) { return L + mm / XM * pw; }
+  function Y(n) { return T + ph - n / YM * ph; }
+  s += '<rect class="g-bg" x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '"/>';
+  for (i = 0; i <= XM; i += 10) s += '<line class="g-grid" x1="' + X(i) + '" y1="' + T + '" x2="' + X(i) + '" y2="' + (T + ph) + '"/><text class="g-tick" x="' + X(i) + '" y="' + (T + ph + 16) + '" text-anchor="middle">' + i + '</text>';
+  for (i = 0; i <= 3000; i += 1000) s += '<line class="g-grid" x1="' + L + '" y1="' + Y(i) + '" x2="' + (L + pw) + '" y2="' + Y(i) + '"/><text class="g-tick" x="' + (L - 6) + '" y="' + (Y(i) + 4) + '" text-anchor="end">' + fmtN(i) + '</text>';
+  s += '<line class="g-axis" x1="' + L + '" y1="' + (T + ph) + '" x2="' + (L + pw) + '" y2="' + (T + ph) + '"/><line class="g-axis" x1="' + L + '" y1="' + T + '" x2="' + L + '" y2="' + (T + ph) + '"/>';
+  s += '<text class="g-lab" x="' + (L + pw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">Squish distance (mm)</text>';
+  s += '<text class="g-lab" transform="translate(13 ' + (T + ph / 2) + ') rotate(-90)" text-anchor="middle">Force on the phone (N)</text>';
+  if (known) {
+    var yb = Y(t.brk);
+    s += '<line class="g-break" x1="' + L + '" y1="' + yb + '" x2="' + (L + pw) + '" y2="' + yb + '"/><text class="g-breaklab" x="' + (L + pw - 4) + '" y="' + (yb - 6) + '" text-anchor="end">glass breaking point</text>';
+  }
+  var ghosts = animate ? state.trials.slice(-6, -1) : [];
+  ghosts.forEach(function (g) { s += '<line class="g-ghost" x1="' + X(0) + '" y1="' + Y(0) + '" x2="' + X(g.xmm) + '" y2="' + Y(g.F) + '"/>'; });
+  var x1 = X(t.xmm), y1 = Y(t.F), len = Math.sqrt((x1 - X(0)) * (x1 - X(0)) + (y1 - Y(0)) * (y1 - Y(0)));
+  s += '<polygon class="g-area" points="' + X(0) + ',' + Y(0) + ' ' + x1 + ',' + Y(0) + ' ' + x1 + ',' + y1 + '"/>';
+  s += '<line class="g-line' + (animate ? ' draw' : '') + '" style="--len:' + len.toFixed(0) + '" x1="' + X(0) + '" y1="' + Y(0) + '" x2="' + x1 + '" y2="' + y1 + '"/>';
+  if (known && t.cracked) {
+    var xb = X(t.brk / t.F * t.xmm), yb2 = Y(t.brk);
+    s += '<path class="g-pt-bad" d="M' + (xb - 6) + ' ' + (yb2 - 6) + 'L' + (xb + 6) + ' ' + (yb2 + 6) + 'M' + (xb + 6) + ' ' + (yb2 - 6) + 'L' + (xb - 6) + ' ' + (yb2 + 6) + '"/>';
+  }
+  s += '<circle class="g-ring" cx="' + x1 + '" cy="' + y1 + '" r="5" style="fill:var(--panel)"/>';
+  var right = x1 > L + pw * 0.62;
+  s += '<text class="g-note" x="' + (right ? x1 - 9 : x1 + 9) + '" y="' + (y1 + (y1 < T + 30 ? 16 : -8)) + '" text-anchor="' + (right ? 'end' : 'start') + '">' + fmtN(t.F) + ' N</text>';
+  s += '<text class="g-note" x="' + (L + 8) + '" y="' + (T + 16) + '">Shaded area = kinetic energy (' + fmt(t.KE, 2) + ' J)</text>';
+  $('fxSvg').innerHTML = s;
+  var w = t.weight ? Math.round(t.F / t.weight) : 0;
+  $('fxCap').textContent = 'The slope of the line shows how stiff the landing is. The shaded triangle is the phone’s kinetic energy. A softer landing makes a longer, lower triangle, so the peak force is smaller. ' +
+    'This peak force is about ' + fmtN(w) + ' times the phone’s weight.' + (ghosts.length ? ' Gray lines are your earlier drops.' : '');
+}
+
+/* ===== App part 2: data table, graphs, missions, tabs, sound, start-up ===== */
+
+/* ---------- data table ---------- */
+function renderTrials() {
+  var tb = $('trialBody'), html = '';
+  state.trials.forEach(function (t) {
+    html += '<tr><td>' + t.n + '</td><td class="r">' + fmt(t.h, 2) + '</td><td class="r">' + t.totalG + '</td><td>' + surfName(t.surface) + '</td><td>' + caseName(t.caseId) +
+      '</td><td>' + glassName(t.glass) + '</td><td class="r">' + fmt(t.v, 2) + '</td><td class="r">' + fmt(t.KE, 2) + '</td><td class="r">' + fmt(t.xmm, 1) +
+      '</td><td class="r">' + fmtN(t.F) + '</td><td><span class="pill ' + (t.cracked ? 'bad' : 'ok') + '">' + (t.cracked ? 'Cracked' : 'Survived') + '</span></td></tr>';
+  });
+  tb.innerHTML = html;
+  $('emptyData').hidden = state.trials.length > 0;
+  $('trialTable').parentNode.hidden = state.trials.length === 0;
+  $('nTrials').textContent = state.trials.length;
+}
+function tableText() {
+  var head = ['Trial', 'Height (m)', 'Total mass (g)', 'Surface', 'Case', 'Glass', 'Speed (m/s)', 'KE (J)', 'Squish (mm)', 'Peak force (N)', 'Result'];
+  var rows = state.trials.map(function (t) {
+    return [t.n, fmt(t.h, 2), t.totalG, surfName(t.surface), caseName(t.caseId), glassName(t.glass), fmt(t.v, 2), fmt(t.KE, 2), fmt(t.xmm, 1), Math.round(t.F), t.cracked ? 'Cracked' : 'Survived'].join('\t');
+  });
+  return [head.join('\t')].concat(rows).join('\n');
+}
+function copyTable() {
+  var msg = $('copyMsg'), fb = $('copyFallback');
+  if (!state.trials.length) { msg.textContent = 'Run a drop first, then copy the table.'; return; }
+  var txt = tableText(), ok = 'Copied. Paste it into OneNote or Word.';
+  function fallback() {
+    fb.hidden = false; fb.value = txt; fb.focus(); fb.select();
+    var done = false; try { done = document.execCommand('copy'); } catch (e) { done = false; }
+    msg.textContent = done ? ok : 'Select the text in the box, then copy it.';
+  }
+  try {
+    if (!navigator.clipboard) { fallback(); return; }
+    navigator.clipboard.writeText(txt).then(function () { fb.hidden = true; msg.textContent = ok; }, fallback);
+  } catch (e) { fallback(); }
+}
+var armTimer = null;
+function disarmStartOver() { var b = $('btnClear'); b.dataset.armed = '0'; b.textContent = 'Start over'; clearTimeout(armTimer); }
+function startOver() {
+  var b = $('btnClear');
+  if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Really start over?'; armTimer = setTimeout(disarmStartOver, 3500); return; }
+  disarmStartOver();
+  state.trials = []; state.done = {}; state.pred = { right: 0, total: 0 };
+  $('copyMsg').textContent = ''; $('copyFallback').hidden = true;
+  renderTrials(); renderGraphs(); renderMissions(); updateScore(); showExample();
+  toast('Trials and missions cleared.');
+}
+
+/* ---------- graphs ---------- */
+function axisFor(maxVal) {
+  var steps = [0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000], i = 0;
+  while (i < steps.length - 1 && maxVal / steps[i] > 6) i++;
+  var step = steps[i];
+  return { step: step, top: Math.max(step, Math.ceil(maxVal / step - 1e-9) * step) };
+}
+function tickText(v) { return String(Math.round(v * 100) / 100); }
+function scatter(id, pts, o) {
+  var W = 440, H = 290, L = 60, R = 16, T = 14, B = 48, pw = W - L - R, ph = H - T - B, s = '', v;
+  var mx = 0, my = 0; pts.forEach(function (p) { mx = Math.max(mx, p.x); my = Math.max(my, p.y); });
+  var xa = axisFor(Math.max(o.xMin, mx * 1.08)), ya = axisFor(Math.max(o.yMin, my * 1.08));
+  function X(a) { return L + a / xa.top * pw; }
+  function Y(a) { return T + ph - a / ya.top * ph; }
+  s += '<rect class="g-bg" x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '"/>';
+  for (v = 0; v <= xa.top + 1e-9; v += xa.step) s += '<line class="g-grid" x1="' + X(v) + '" y1="' + T + '" x2="' + X(v) + '" y2="' + (T + ph) + '"/><text class="g-tick" x="' + X(v) + '" y="' + (T + ph + 16) + '" text-anchor="middle">' + o.xf(v) + '</text>';
+  for (v = 0; v <= ya.top + 1e-9; v += ya.step) s += '<line class="g-grid" x1="' + L + '" y1="' + Y(v) + '" x2="' + (L + pw) + '" y2="' + Y(v) + '"/><text class="g-tick" x="' + (L - 6) + '" y="' + (Y(v) + 4) + '" text-anchor="end">' + o.yf(v) + '</text>';
+  s += '<line class="g-axis" x1="' + L + '" y1="' + (T + ph) + '" x2="' + (L + pw) + '" y2="' + (T + ph) + '"/><line class="g-axis" x1="' + L + '" y1="' + T + '" x2="' + L + '" y2="' + (T + ph) + '"/>';
+  s += '<text class="g-lab" x="' + (L + pw / 2) + '" y="' + (H - 8) + '" text-anchor="middle">' + o.xLab + '</text>';
+  s += '<text class="g-lab" transform="translate(13 ' + (T + ph / 2) + ') rotate(-90)" text-anchor="middle">' + o.yLab + '</text>';
+  if (!pts.length) s += '<text class="g-lab" x="' + (L + pw / 2) + '" y="' + (T + ph / 2) + '" text-anchor="middle">Your drops will appear here.</text>';
+  if (o.connect) {
+    var groups = {};
+    pts.forEach(function (p) { (groups[p.mass] = groups[p.mass] || []).push(p); });
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k].slice().sort(function (a, b) { return a.x - b.x; });
+      if (g.length > 1) s += '<polyline class="g-conn" points="' + g.map(function (p) { return X(p.x).toFixed(1) + ',' + Y(p.y).toFixed(1); }).join(' ') + '"/>';
+    });
+  }
+  pts.forEach(function (p, i) {
+    var cx = X(p.x), cy = Y(p.y);
+    if (p.cracked) s += '<path class="g-pt-bad" d="M' + (cx - 5) + ' ' + (cy - 5) + 'L' + (cx + 5) + ' ' + (cy + 5) + 'M' + (cx + 5) + ' ' + (cy - 5) + 'L' + (cx - 5) + ' ' + (cy + 5) + '"><title>' + p.tip + '</title></path>';
+    else s += '<circle class="g-pt-ok" cx="' + cx + '" cy="' + cy + '" r="5.5"><title>' + p.tip + '</title></circle>';
+    if (i === pts.length - 1) s += '<circle class="g-ring" cx="' + cx + '" cy="' + cy + '" r="10"/>';
+  });
+  $(id).innerHTML = s;
+}
+function tripText(t) {
+  return 'Drop ' + t.n + ': ' + fmt(t.h, 2) + ' m, ' + t.totalG + ' g, ' + surfName(t.surface) + ', ' + caseName(t.caseId) + '. ' + fmtN(t.F) + ' N, ' + (t.cracked ? 'cracked' : 'survived');
+}
+function renderGraphs() {
+  var A = state.trials.map(function (t) { return { x: t.v, y: t.KE, cracked: t.cracked, mass: t.totalG, tip: tripText(t) }; });
+  var B = state.trials.map(function (t) { return { x: t.xmm, y: t.F, cracked: t.cracked, mass: t.totalG, tip: tripText(t) }; });
+  scatter('gKE', A, { xMin: 8, yMin: 2, xLab: 'Speed at impact (m/s)', yLab: 'Kinetic energy (J)', xf: tickText, yf: tickText, connect: $('optConnect').checked });
+  scatter('gPF', B, { xMin: 10, yMin: 1000, xLab: 'Squish distance (mm)', yLab: 'Peak force (N)', xf: tickText, yf: fmtN, connect: false });
+}
+
+/* ---------- missions ---------- */
+function renderMissions() {
+  var box = $('missionList'), html = '';
+  LAB.MISSIONS.forEach(function (m, i) {
+    var done = !!state.done[m.id];
+    html += '<div class="mission' + (done ? ' done' : '') + '"><div class="mno" aria-hidden="true">' + (done ? '&#10003;' : (i + 1)) + '</div><div><h4>' + m.title +
+      (done ? ' <span class="sr-only">(complete)</span>' : '') + '</h4><p>' + m.task + '</p>' +
+      (m.hint ? '<details><summary>Hint</summary><p>' + m.hint + '</p></details>' : '') +
+      '<p class="note"><b>In your notebook:</b> ' + m.note + '</p></div></div>';
+  });
+  box.innerHTML = html;
+  $('missionCount').textContent = Object.keys(state.done).length + ' of ' + LAB.MISSIONS.length + ' missions complete';
+}
+function checkMissions(announce) {
+  var newly = [];
+  LAB.MISSIONS.forEach(function (m) { if (!state.done[m.id] && m.check(state.trials)) { state.done[m.id] = true; newly.push(m.title); } });
+  if (newly.length) { renderMissions(); if (announce) toast('Mission complete: ' + newly.join(', ')); }
+}
+
+/* ---------- tabs ---------- */
+function initTabs() {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function select(t) {
+    tabs.forEach(function (x) {
+      var on = x === t; x.setAttribute('aria-selected', on ? 'true' : 'false'); x.tabIndex = on ? 0 : -1; $(x.getAttribute('aria-controls')).hidden = !on;
+    });
+  }
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { select(t); });
+    t.addEventListener('keydown', function (e) {
+      var j = -1;
+      if (e.key === 'ArrowRight') j = (i + 1) % tabs.length; else if (e.key === 'ArrowLeft') j = (i + tabs.length - 1) % tabs.length;
+      else if (e.key === 'Home') j = 0; else if (e.key === 'End') j = tabs.length - 1;
+      if (j >= 0) { e.preventDefault(); select(tabs[j]); tabs[j].focus(); }
+    });
+  });
+}
+
+/* ---------- predict first ---------- */
+function showPredict() { $('predictBox').hidden = false; $('predYes').focus({ preventScroll: true }); }
+function hidePredict() { $('predictBox').hidden = true; }
+function updateScore() { $('predScore').textContent = state.pred.total ? 'Predictions: ' + state.pred.right + ' of ' + state.pred.total + ' right' : ''; }
+
+/* ---------- small helpers ---------- */
+var toastTimer = null;
+function toast(msg) {
+  var t = $('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3600);
+}
+function debounce(fn, ms) { var id; return function () { clearTimeout(id); id = setTimeout(fn, ms); }; }
+function showExample() {
+  var ex = LAB.compute({ h: 1.0, phoneG: 180, surface: 'tile', caseId: 'none', breakN: 1000 });
+  ex.breakKnown = true; ex.glass = 'thin';
+  renderResult(toTrial(ex, null, 0), { example: true, predText: null });
+}
+function updateMath() {
+  var box = $('mathBox');
+  if (!$('optMath').checked) { box.hidden = true; return; }
+  var r = LAB.compute(currentInput());
+  box.textContent = [
+    'PE at the top      = m × g × h = ' + fmt(r.m, 3) + ' kg × 9.8 m/s² × ' + fmt(r.h, 2) + ' m = ' + fmt(r.E0, 2) + ' J',
+    'Speed at impact    = √(2 × g × h) = ' + fmt(r.v, 2) + ' m/s',
+    'KE at impact       = ½ × m × v² = ' + fmt(r.KE, 2) + ' J   (all of the PE became KE)',
+    'Stiffness of stack = ' + fmtN(r.k) + ' N/m   (phone + case + surface squish together)',
+    'Peak force         = √(2 × k × KE) = ' + fmtN(r.F) + ' N',
+    'Squish distance    = force ÷ k = ' + fmt(r.xmm, 1) + ' mm'
+  ].join('\n');
+  box.hidden = false;
+}
+
+/* ---------- sound (off until you turn it on) ---------- */
+var actx = null;
+function sfx(kind, res) {
+  if (!$('optSound').checked) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    var t0 = actx.currentTime, i;
+    if (kind === 'thud') {
+      var o = actx.createOscillator(), g = actx.createGain(), amp = Math.min(0.6, 0.12 + res.KE * 0.05);
+      o.type = 'sine'; o.frequency.setValueAtTime(140, t0); o.frequency.exponentialRampToValueAtTime(45, t0 + 0.16);
+      g.gain.setValueAtTime(amp, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.22);
+      o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0 + 0.25);
+    } else {
+      var len = Math.floor(actx.sampleRate * 0.25), buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
+      for (i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+      var src = actx.createBufferSource(), hp = actx.createBiquadFilter(), g2 = actx.createGain();
+      src.buffer = buf; hp.type = 'highpass'; hp.frequency.value = 1800; g2.gain.value = 0.45;
+      src.connect(hp); hp.connect(g2); g2.connect(actx.destination); src.start(t0 + 0.01);
+      for (i = 0; i < 5; i++) {
+        var p = actx.createOscillator(), pg = actx.createGain(), st = t0 + 0.05 + i * 0.06 + Math.random() * 0.04;
+        p.type = 'sine'; p.frequency.value = 2800 + Math.random() * 3000;
+        pg.gain.setValueAtTime(0.05, st); pg.gain.exponentialRampToValueAtTime(0.0005, st + 0.12);
+        p.connect(pg); pg.connect(actx.destination); p.start(st); p.stop(st + 0.14);
+      }
+    }
+  } catch (e) { /* no audio available: carry on silently */ }
+}
+
+/* ---------- start-up ---------- */
+function init() {
+  Draw.readTheme();
+  ['pe', 'ke', 'sq', 'ht'].forEach(function (k) {
+    var row = document.querySelector('.ebar[data-k="' + k + '"]'); barEls[k] = { fill: row.querySelector('.fill'), num: row.querySelector('.num') };
+  });
+  buildOptions();
+  $('inHeight').value = state.params.h; $('inMass').value = state.params.phoneG;
+  if (reduceMotion()) $('optAnim').checked = false;
+  syncOptionStates(); updateLabels();
+
+  $('inHeight').addEventListener('input', onControlChange);
+  $('inMass').addEventListener('input', onControlChange);
+  $('hMinus').addEventListener('click', function () { nudge('inHeight', -0.05); });
+  $('hPlus').addEventListener('click', function () { nudge('inHeight', 0.05); });
+  $('mMinus').addEventListener('click', function () { nudge('inMass', -10); });
+  $('mPlus').addEventListener('click', function () { nudge('inMass', 10); });
+  ['surfaceGroup', 'caseGroup', 'glassGroup'].forEach(function (id) { $(id).addEventListener('change', onControlChange); });
+  $('btnDrop').addEventListener('click', requestDrop);
+  $('optPredict').addEventListener('change', function () { if (!this.checked) hidePredict(); });
+  $('predYes').addEventListener('click', function () { state.pendingPred = 'crack'; beginDrop(); });
+  $('predNo').addEventListener('click', function () { state.pendingPred = 'survive'; beginDrop(); });
+  $('predCancel').addEventListener('click', function () { hidePredict(); $('btnDrop').focus(); });
+  $('btnReveal').addEventListener('click', function () { state.revealed = true; updateLabels(); toast('Breaking point: ' + fmtN(state.mystery) + ' N'); });
+  $('btnNewMystery').addEventListener('click', function () {
+    state.mystery = LAB.newMystery(); state.revealed = false;
+    state.trials.forEach(function (t) { if (t.glass === 'mystery') t.glass = 'mystery-old'; });
+    updateLabels(); renderTrials(); renderGraphs(); toast('New mystery glass loaded.');
+  });
+  $('btnCopy').addEventListener('click', copyTable);
+  $('btnClear').addEventListener('click', startOver);
+  $('optConnect').addEventListener('change', renderGraphs);
+  $('optMath').addEventListener('change', updateMath);
+  initTabs();
+
+  showExample(); renderTrials(); renderGraphs(); renderMissions(); updateScore(); showReady();
+
+  var redrawIdle = debounce(function () { if (!state.running) draw(currentDisplayState()); }, 60);
+  window.addEventListener('resize', redrawIdle);
+  if (window.ResizeObserver) new ResizeObserver(redrawIdle).observe($('cvStage'));
+  function themeChanged() { Draw.readTheme(); if (!state.running) draw(currentDisplayState()); }
+  if (window.matchMedia) { var mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', themeChanged); }
+  if (window.MutationObserver) new MutationObserver(themeChanged).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (!state.running) draw(currentDisplayState()); });
+  window.__phoneDropLab = { state: state };
+}
+init();
+
+})();
+</script>
+</body></html>
