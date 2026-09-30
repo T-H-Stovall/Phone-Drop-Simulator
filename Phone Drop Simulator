@@ -84,11 +84,16 @@ h1{font:800 clamp(28px,4.4vw,38px)/1.02 var(--font-display);letter-spacing:-.015
 .bar-note b{font-family:var(--font-data);font-weight:500;color:var(--ink)}
 .h3row{display:flex;justify-content:space-between;align-items:center;gap:6px 12px;flex-wrap:wrap;margin:16px 0 6px}
 .h3row .h3{margin:0}
+.ctl-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.ctl-head .h2{margin:0}
 
 /* replay: step through a finished drop, then pin moments to compare their energy */
 .replay{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
 .replay-head{display:flex;justify-content:space-between;align-items:baseline;gap:2px 16px;flex-wrap:wrap;margin-bottom:8px}
 .replay-head .h3{margin:0}
+.replay-head .btn{min-width:84px}
+.replay-head .when{flex-basis:100%;text-align:left}
+@media (min-width:560px){.replay-head .when{flex-basis:auto;margin-left:auto}}
 .when{font:500 14px var(--font-data);color:var(--ink);font-variant-numeric:tabular-nums;min-height:21px}
 .scrub-box{min-width:0}
 input.scrub{-webkit-appearance:none;appearance:none;display:block;background:transparent;cursor:pointer}
@@ -329,6 +334,7 @@ tr:last-child td{border-bottom:0}
       <div class="replay" id="replay">
         <div class="replay-head">
           <h3 class="h3" id="replayTitle">Step through the drop</h3>
+          <button type="button" class="btn small" id="scPlay" disabled>Play</button>
           <span class="when" id="scWhen" aria-hidden="true"></span>
         </div>
         <div class="step-row">
@@ -397,7 +403,10 @@ tr:last-child td{border-bottom:0}
 
     <div class="side">
       <section class="card controls" aria-labelledby="ctlTitle">
-        <h2 class="h2" id="ctlTitle">Set up the drop</h2>
+        <div class="ctl-head">
+          <h2 class="h2" id="ctlTitle">Set up the drop</h2>
+          <button type="button" class="btn small ghost" id="btnReset">Reset</button>
+        </div>
 
         <div class="field">
           <div class="lab"><label for="inHeight">Drop height</label><span class="val" id="outHeight">1.00 m</span></div>
@@ -1451,6 +1460,7 @@ function syncScrubUI() {
       renderMoms(LAB.scrubber(LAB.compute({ h: 1, phoneG: 180, surface: 'concrete', caseId: 'none', breakN: 1e9 })).moments);
       $('scPhases').innerHTML = ''; $('inScrub').value = 0; $('scWhen').textContent = '';
     }
+    $('scPlay').textContent = 'Play';
     $('scNote').textContent = 'Drop the phone, then use this slider to look at any moment of the drop and the collision.';
   } else {
     $('scNote').textContent = 'A real collision lasts only about ' + fmt(sc.res.tImpact * 1000, 1) + ' ms. It is stretched out here so you can see it.';
@@ -1472,6 +1482,23 @@ function updateScrubUI(st) {
     if (ms[i].t < sc.t - 1e-9) prev = ms[i]; else if (ms[i].t > sc.t + 1e-9 && !next) next = ms[i];
   }
   $('scPrev').disabled = !prev; $('scNext').disabled = !next;
+  $('scPlay').textContent = sc.playing ? 'Pause' : (sc.t >= sc.total - 1e-9 ? 'Replay' : 'Play');
+}
+function stopPlay() { if (state.scrub) { state.scrub.playing = false; $('scPlay').textContent = state.scrub.t >= state.scrub.total - 1e-9 ? 'Replay' : 'Play'; } }
+function togglePlay() {
+  var sc = state.scrub; if (!sc || state.running) return;
+  if (sc.playing) { stopPlay(); return; }
+  if (sc.t >= sc.total - 1e-9) sc.t = 0;                 // Replay starts over from the release
+  sc.playing = true; sc.last = performance.now();
+  scrubTo(sc.t);
+  requestAnimationFrame(playStep);
+}
+function playStep(now) {
+  var sc = state.scrub; if (!sc || !sc.playing) return;
+  var t = sc.t + Math.min(0.05, (now - sc.last) / 1000); sc.last = now;
+  if (t >= sc.total) { t = sc.total; sc.playing = false; }
+  scrubTo(t);
+  if (sc.playing) requestAnimationFrame(playStep);
 }
 function scrubTo(t) {
   var sc = state.scrub; if (!sc || state.running) return;
@@ -1523,6 +1550,23 @@ function removePin(key) {
   renderPins();
   xs = $('snaps').querySelectorAll('.x');
   if (xs.length) xs[Math.min(idx, xs.length - 1)].focus(); else if (!$('btnPin').disabled) $('btnPin').focus();
+}
+
+/* ---------- reset: every control and display option back to how the page first loaded (logged drops and pins stay) ---------- */
+function resetSimulator() {
+  if (state.running) return;
+  var d = { h: 1.0, phoneG: 180, surface: 'tile', caseId: 'none', glass: 'thin' }, radios = { surface: d.surface, 'case': d.caseId, glass: d.glass }, name, i, el;
+  $('inHeight').value = d.h; $('inMass').value = d.phoneG;
+  for (name in radios) {
+    el = document.querySelectorAll('input[name="' + name + '"]');
+    for (i = 0; i < el.length; i++) el[i].checked = el[i].value === radios[name];
+  }
+  $('optAnim').checked = !reduceMotion(); $('optSlow').checked = true; $('optSound').checked = false;
+  $('optPredict').checked = false; $('optMath').checked = false; $('optConnect').checked = false;
+  state.pendingPred = null; state.revealed = false; state.flash = 0; state.shake = 0;
+  onControlChange(); renderGraphs();
+  showExample();
+  toast('Simulator reset.');
 }
 
 /* ---------- predict first ---------- */
@@ -1619,13 +1663,15 @@ function init() {
   });
   $('btnCopy').addEventListener('click', copyTable);
   $('btnClear').addEventListener('click', startOver);
-  $('inScrub').addEventListener('input', function () { var sc = state.scrub; if (sc) scrubTo(parseInt(this.value, 10) / 1000 * sc.total); });
-  $('scPrev').addEventListener('click', function () { stepMoment(-1); });
-  $('scNext').addEventListener('click', function () { stepMoment(1); });
+  $('inScrub').addEventListener('input', function () { var sc = state.scrub; if (sc) { stopPlay(); scrubTo(parseInt(this.value, 10) / 1000 * sc.total); } });
+  $('scPrev').addEventListener('click', function () { stopPlay(); stepMoment(-1); });
+  $('scNext').addEventListener('click', function () { stopPlay(); stepMoment(1); });
   $('scMoms').addEventListener('click', function (e) {
     var i = e.target.getAttribute('data-i'), sc = state.scrub;
-    if (sc && i !== null) scrubTo(sc.moments[parseInt(i, 10)].t);
+    if (sc && i !== null) { stopPlay(); scrubTo(sc.moments[parseInt(i, 10)].t); }
   });
+  $('scPlay').addEventListener('click', togglePlay);
+  $('btnReset').addEventListener('click', resetSimulator);
   $('btnPin').addEventListener('click', pinMoment);
   $('btnUnpin').addEventListener('click', function () { state.pins = []; renderPins(); if (!$('btnPin').disabled) $('btnPin').focus(); });
   $('snaps').addEventListener('click', function (e) { var k = e.target.getAttribute('data-key'); if (k) removePin(k); });
